@@ -94,15 +94,20 @@ export async function saveMemory(memory: Memory): Promise<{ backend: Backend; ke
   }
 
   if (insforge) {
-    const { data, error } = await insforge.database
-      .from('agent_memories')
-      .insert([row])
-      .select()
-    if (!error && data?.[0]) {
-      return { backend: 'insforge', key: data[0].id }
+    try {
+      const { data, error } = await insforge.database
+        .from('agent_memories')
+        .insert([row])
+        .select()
+      if (!error && data?.[0]) {
+        return { backend: 'insforge', key: data[0].id }
+      }
+      // fall through to local on error so a turn never hard-fails
+      console.warn('InsForge saveMemory failed, using local fallback:', error?.message)
+    } catch (e) {
+      // Network throw (offline / CORS / DNS) — degrade to local, never reject.
+      console.warn('InsForge saveMemory threw, using local fallback:', e instanceof Error ? e.message : e)
     }
-    // fall through to local on error so a turn never hard-fails
-    console.warn('InsForge saveMemory failed, using local fallback:', error?.message)
   }
 
   const all = readLocal<Memory>(LOCAL_MEM_KEY)
@@ -113,22 +118,26 @@ export async function saveMemory(memory: Memory): Promise<{ backend: Backend; ke
 
 export async function listMemories(agentId: string): Promise<Memory[]> {
   if (insforge) {
-    const { data, error } = await insforge.database
-      .from('agent_memories')
-      .select()
-      .eq('agent_id', agentId)
-      .order('created_at', { ascending: false })
-      .limit(50)
-    if (!error && data) {
-      return (data as StoredMemory[]).map((m) => ({
-        id: m.id!,
-        agentId: m.agent_id,
-        content: m.content,
-        importance: m.importance,
-        turn: m.turn,
-        timestamp: m.created_at ? Date.parse(m.created_at) : 0,
-        storageKey: m.id,
-      }))
+    try {
+      const { data, error } = await insforge.database
+        .from('agent_memories')
+        .select()
+        .eq('agent_id', agentId)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      if (!error && data) {
+        return (data as StoredMemory[]).map((m) => ({
+          id: m.id!,
+          agentId: m.agent_id,
+          content: m.content,
+          importance: m.importance,
+          turn: m.turn,
+          timestamp: m.created_at ? Date.parse(m.created_at) : 0,
+          storageKey: m.id,
+        }))
+      }
+    } catch (e) {
+      console.warn('InsForge listMemories threw, using local fallback:', e instanceof Error ? e.message : e)
     }
   }
   return readLocal<Memory>(LOCAL_MEM_KEY).filter((m) => m.agentId === agentId)
@@ -140,9 +149,13 @@ export async function listMemories(agentId: string): Promise<Memory[]> {
 
 export async function saveRun(run: AgentRun): Promise<{ backend: Backend }> {
   if (insforge) {
-    const { error } = await insforge.database.from('agent_runs').insert([run]).select()
-    if (!error) return { backend: 'insforge' }
-    console.warn('InsForge saveRun failed, using local fallback:', error.message)
+    try {
+      const { error } = await insforge.database.from('agent_runs').insert([run]).select()
+      if (!error) return { backend: 'insforge' }
+      console.warn('InsForge saveRun failed, using local fallback:', error.message)
+    } catch (e) {
+      console.warn('InsForge saveRun threw, using local fallback:', e instanceof Error ? e.message : e)
+    }
   }
   const all = readLocal<AgentRun>(LOCAL_RUN_KEY)
   all.push({ ...run, created_at: undefined })
@@ -152,12 +165,16 @@ export async function saveRun(run: AgentRun): Promise<{ backend: Backend }> {
 
 export async function topRuns(limit = 10): Promise<AgentRun[]> {
   if (insforge) {
-    const { data, error } = await insforge.database
-      .from('agent_runs')
-      .select()
-      .order('score', { ascending: false })
-      .limit(limit)
-    if (!error && data) return data as AgentRun[]
+    try {
+      const { data, error } = await insforge.database
+        .from('agent_runs')
+        .select()
+        .order('score', { ascending: false })
+        .limit(limit)
+      if (!error && data) return data as AgentRun[]
+    } catch (e) {
+      console.warn('InsForge topRuns threw, using local fallback:', e instanceof Error ? e.message : e)
+    }
   }
   return readLocal<AgentRun>(LOCAL_RUN_KEY)
     .sort((a, b) => b.score - a.score)
@@ -201,15 +218,20 @@ export async function storeCharacterModel(
     return { url: modelUrl, key: modelUrl, backend: 'local' }
   }
 
-  const { data, error } = await insforge.storage
-    .from(CHARACTERS_BUCKET)
-    .upload(`models/${role}-${size}.glb`, file)
+  try {
+    const { data, error } = await insforge.storage
+      .from(CHARACTERS_BUCKET)
+      .upload(`models/${role}-${size}.glb`, file)
 
-  if (error || !data) {
-    console.warn('InsForge storage upload failed:', error?.message)
+    if (error || !data) {
+      console.warn('InsForge storage upload failed:', error?.message)
+      return { url: modelUrl, key: modelUrl, backend: 'local' }
+    }
+    return { url: data.url, key: data.key, backend: 'insforge' }
+  } catch (e) {
+    console.warn('InsForge storage upload threw, using ephemeral Meshy URL:', e instanceof Error ? e.message : e)
     return { url: modelUrl, key: modelUrl, backend: 'local' }
   }
-  return { url: data.url, key: data.key, backend: 'insforge' }
 }
 
 // ---------------------------------------------------------------------------

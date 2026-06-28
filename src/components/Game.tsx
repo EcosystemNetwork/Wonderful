@@ -7,6 +7,7 @@ import { NebiusClient, NEBIUS_CONFIG } from '../api/nebius'
 import { useGameLoop } from '../game/loop'
 import { isInsforgeConfigured } from '../api/insforge'
 import MeshyPanel from './MeshyPanel'
+import Leaderboard from './Leaderboard'
 import * as THREE from 'three'
 
 /** Loads and renders a Meshy-generated .glb model. Suspends while fetching. */
@@ -275,6 +276,8 @@ export default function Game() {
         </div>
 
         <MeshyPanel />
+
+        <Leaderboard />
 
         <div className="bg-gray-700 p-3 rounded">
           <h2 className="font-bold mb-2">Game Controls</h2>

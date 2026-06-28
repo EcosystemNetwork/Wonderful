@@ -12,11 +12,13 @@ export const NEBIUS_CONFIG = {
   baseURL: 'https://api.studio.nebius.com/v1',
   /**
    * Default chat model. Override with VITE_NEBIUS_MODEL.
-   * DeepSeek V3 = best open reasoning + reliable JSON-mode adherence for the agent loop.
-   * Alternatives: 'openai/gpt-oss-120b' (faster), 'Qwen/Qwen3-235B-A22B-Instruct-2507'.
-   * Avoid reasoning models (DeepSeek-R1) — their <think> output breaks json_object parsing.
+   * Qwen3-235B-Instruct = frontier-class quality + clean JSON mode at ~0.85s/call,
+   * the best fit for the per-agent game loop (verified live on this account).
+   * Max-capability alt: 'deepseek-ai/DeepSeek-V4-Pro' (~2.1s/call).
+   * Avoid: gpt-oss-120b / GLM-5.2 (return empty content under json_object here);
+   * reasoning/thinking models (their <think> output breaks json_object parsing).
    */
-  model: import.meta.env.VITE_NEBIUS_MODEL || 'deepseek-ai/DeepSeek-V3',
+  model: import.meta.env.VITE_NEBIUS_MODEL || 'Qwen/Qwen3-235B-A22B-Instruct-2507',
   /** Nebius AI Cloud console identifiers (reference only). */
   projectId: import.meta.env.VITE_NEBIUS_PROJECT_ID || 'project-e00a898kpr00dr28vrewyf',
   tenantUserAccountId:

@@ -181,13 +181,29 @@ export async function storeCharacterModel(
     return { url: modelUrl, key: modelUrl, backend: 'local' }
   }
 
-  const res = await fetch(modelUrl)
-  const blob = await res.blob()
-  const file = new File([blob], `${role}.glb`, { type: 'model/gltf-binary' })
+  // Re-hosting is best-effort. Meshy serves models from a signed CDN URL that
+  // usually lacks CORS headers, so a browser fetch() of it can throw "Failed to
+  // fetch". That must NOT discard a successful generation — fall back to the
+  // ephemeral Meshy URL so the character still attaches.
+  let file: File
+  let size: number
+  try {
+    const res = await fetch(modelUrl)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const blob = await res.blob()
+    size = blob.size
+    file = new File([blob], `${role}.glb`, { type: 'model/gltf-binary' })
+  } catch (e) {
+    console.warn(
+      'Could not fetch Meshy asset for re-hosting (likely CORS on the CDN); using ephemeral Meshy URL:',
+      e instanceof Error ? e.message : e,
+    )
+    return { url: modelUrl, key: modelUrl, backend: 'local' }
+  }
 
   const { data, error } = await insforge.storage
     .from(CHARACTERS_BUCKET)
-    .upload(`models/${role}-${blob.size}.glb`, file)
+    .upload(`models/${role}-${size}.glb`, file)
 
   if (error || !data) {
     console.warn('InsForge storage upload failed:', error?.message)

@@ -68,6 +68,35 @@ export async function createTextTo3dTask(prompt: string): Promise<string> {
   return id
 }
 
+/**
+ * Start a refine task that textures a finished preview model. Returns the new
+ * task id (refine produces a fresh task, distinct from the preview task).
+ */
+export async function createRefineTask(previewTaskId: string): Promise<string> {
+  if (!isMeshyConfigured) {
+    throw new Error('Meshy API key not configured (set VITE_MESHY_API_KEY)')
+  }
+
+  const res = await fetch(MESHY_BASE, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      mode: 'refine',
+      preview_task_id: previewTaskId,
+      enable_pbr: true,
+    }),
+  })
+
+  if (!res.ok) {
+    throw new Error(`Meshy refine failed: ${res.status} ${await res.text()}`)
+  }
+
+  const data = await res.json()
+  const id = data.result ?? data.id
+  if (!id) throw new Error('Meshy refine returned no task id')
+  return id
+}
+
 /** Fetch the current state of a task. */
 export async function getTask(id: string): Promise<MeshyTask> {
   const res = await fetch(`${MESHY_BASE}/${id}`, {
@@ -79,9 +108,11 @@ export async function getTask(id: string): Promise<MeshyTask> {
   return res.json()
 }
 
+export type MeshyStage = 'preview' | 'refine'
+
 export interface PollOptions {
-  /** Called on every poll with 0-100 progress. */
-  onProgress?: (progress: number, status: MeshyStatus) => void
+  /** Called on every poll with 0-100 progress (and stage during a full generate). */
+  onProgress?: (progress: number, status: MeshyStatus, stage?: MeshyStage) => void
   /** Milliseconds between polls. */
   intervalMs?: number
   /** Give up after this many milliseconds. */
@@ -115,10 +146,34 @@ export async function pollUntilDone(id: string, opts: PollOptions = {}): Promise
   throw new Error('Meshy task timed out')
 }
 
+export interface GenerateOptions extends PollOptions {
+  /**
+   * Run the refine pass after preview to produce a textured model. Defaults to
+   * true; set false for fast, untextured geometry.
+   */
+  refine?: boolean
+}
+
 /**
- * Convenience: generate a model from a prompt and return the GLB URL once ready.
+ * Generate a model from a prompt and return the GLB URL once ready.
+ *
+ * By default this runs Meshy's two-stage flow: a `preview` pass for geometry,
+ * then a `refine` pass that adds PBR textures. Progress is reported per stage.
  */
-export async function generateModel(prompt: string, opts: PollOptions = {}): Promise<string> {
-  const id = await createTextTo3dTask(prompt)
-  return pollUntilDone(id, opts)
+export async function generateModel(prompt: string, opts: GenerateOptions = {}): Promise<string> {
+  const { refine = true, onProgress, ...pollOpts } = opts
+
+  const previewId = await createTextTo3dTask(prompt)
+  const previewUrl = await pollUntilDone(previewId, {
+    ...pollOpts,
+    onProgress: (p, s) => onProgress?.(p, s, 'preview'),
+  })
+
+  if (!refine) return previewUrl
+
+  const refineId = await createRefineTask(previewId)
+  return pollUntilDone(refineId, {
+    ...pollOpts,
+    onProgress: (p, s) => onProgress?.(p, s, 'refine'),
+  })
 }

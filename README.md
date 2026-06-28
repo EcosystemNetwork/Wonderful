@@ -6,7 +6,7 @@ A self-improving AI agent game powered by:
 - **Nebius AI** — LLM inference for agent reasoning & self-improvement
 - **InsForge** — auth, database, and storage backend (agent-native cloud infra)
 - **Meshy.ai** — 3D character generation, rigging & animation
-- **Claude Code Proxy** — agent orchestration
+- **Claude Code Proxy** — agent orchestration ([docs](docs/claude-code-proxy.md)): Claude Code routed through a Nebius bridge to build & operate the agents (dev/operator loop, not a runtime dependency of the shipped game)
 
 ## Concept
 

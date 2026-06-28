@@ -29,7 +29,8 @@ export default function MeshyPanel() {
 
     try {
       const meshyUrl = await generateModel(prompt, {
-        onProgress: (p, s) => setStatus(`${s.toLowerCase()}... ${p}%`),
+        onProgress: (p, _s, stage) =>
+          setStatus(`${stage === 'refine' ? 'Texturing' : 'Sculpting'}... ${p}%`),
       })
 
       setStatus('Saving model to InsForge Storage...')
@@ -39,7 +40,7 @@ export default function MeshyPanel() {
       setStatus(
         stored.backend === 'insforge'
           ? `✓ Stored in InsForge & attached: ${stored.key}`
-          : '✓ Attached (InsForge not configured — using Meshy URL)',
+          : '✓ Attached using Meshy URL (re-host skipped — InsForge off or CDN blocked it)',
       )
     } catch (err) {
       console.error('Meshy generation failed:', err)

@@ -8,8 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest",
-    "nebius:smoke": "node scripts/nebius-smoke.mjs",
-    "nebius:models": "node scripts/nebius-models.mjs"
+    "nebius:smoke": "node --env-file-if-exists=.env scripts/nebius-smoke.mjs",
+    "nebius:models": "node --env-file-if-exists=.env scripts/nebius-models.mjs"
   },
   "dependencies": {
     "@insforge/sdk": "^1.4.3",

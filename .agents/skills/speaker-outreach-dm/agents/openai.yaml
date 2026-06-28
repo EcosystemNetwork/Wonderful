@@ -1,0 +1,4 @@
+interface:
+  display_name: "Speaker Outreach DM"
+  short_description: "Generate personalized cold DMs or emails to recruit speakers, panelists, or guests for developer events."
+  default_prompt: "Use $speaker-outreach-dm to write an outreach message to recruit a speaker for my event."

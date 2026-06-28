@@ -1,0 +1,4 @@
+interface:
+  display_name: "Client Delivery Copilot"
+  short_description: "Turn briefs into delivery plans."
+  default_prompt: "Use $client-delivery-copilot to turn this client brief into a delivery plan and handoff."

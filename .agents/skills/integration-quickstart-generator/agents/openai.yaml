@@ -1,0 +1,4 @@
+interface:
+  display_name: "Integration Quickstart Generator"
+  short_description: "Generate a developer quickstart and starter README."
+  default_prompt: "Use $integration-quickstart-generator to write a quickstart for this tool."

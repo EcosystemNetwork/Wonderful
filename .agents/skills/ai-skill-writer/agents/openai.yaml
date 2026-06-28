@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Skill Writer"
+  short_description: "Turn recurring work into AI skills."
+  default_prompt: "Use $ai-skill-writer to convert this recurring task into a reusable AI skill."

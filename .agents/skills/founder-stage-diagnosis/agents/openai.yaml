@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Founder Stage Diagnosis"
+  short_description: "Diagnose true startup stage and prescribe a weekly action list."
+  default_prompt: "Use $founder-stage-diagnosis to diagnose my current startup stage and what to do this week."

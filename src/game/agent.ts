@@ -1,4 +1,22 @@
 import { Agent, AgentAction, Challenge, ImprovementEntry } from './types'
+import { NEBIUS_CONFIG } from '../api/nebius'
+
+/**
+ * Parse a JSON object from an LLM response, tolerating markdown code fences or
+ * surrounding prose that some models emit even when JSON mode is requested.
+ */
+function parseJSON<T>(content: string | null | undefined): T {
+  if (!content) throw new Error('Empty LLM response')
+  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  const candidate = fenced ? fenced[1] : content
+  try {
+    return JSON.parse(candidate) as T
+  } catch {
+    const span = candidate.match(/\{[\s\S]*\}/)
+    if (span) return JSON.parse(span[0]) as T
+    throw new Error('No JSON object found in LLM response')
+  }
+}
 
 /**
  * SelfImprovingAgent - Core AI agent that learns from experience
@@ -20,13 +38,14 @@ export class SelfImprovingAgent {
     const prompt = this.buildDecisionPrompt(challenge, context)
     
     const response = await this.llmClient.chat.completions.create({
-      model: 'meta-llama/Meta-Llama-3.1-70B-Instruct',
+      model: NEBIUS_CONFIG.model,
       messages: [
         { role: 'system', content: this.getSystemPrompt() },
         { role: 'user', content: prompt }
       ],
       temperature: 0.7,
-      max_tokens: 500
+      max_tokens: 500,
+      response_format: { type: 'json_object' }
     })
 
     const decision = this.parseDecision(response.choices[0].message.content)
@@ -65,17 +84,20 @@ Return ONLY a JSON object:
 `
 
     const response = await this.llmClient.chat.completions.create({
-      model: 'meta-llama/Meta-Llama-3.1-70B-Instruct',
+      model: NEBIUS_CONFIG.model,
       messages: [
         { role: 'system', content: 'You are a self-improving AI agent. Be concise and strategic.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.8,
-      max_tokens: 400
+      max_tokens: 400,
+      response_format: { type: 'json_object' }
     })
 
     try {
-      const improvement = JSON.parse(response.choices[0].message.content)
+      const improvement = parseJSON<{ newStrategy: string; skillToLearn?: string }>(
+        response.choices[0].message.content
+      )
       
       const entry: ImprovementEntry = {
         timestamp: Date.now(),
@@ -110,14 +132,15 @@ Return as JSON: {"insights": ["insight1", "insight2", "insight3"]}
 `
 
     const response = await this.llmClient.chat.completions.create({
-      model: 'meta-llama/Meta-Llama-3.1-70B-Instruct',
+      model: NEBIUS_CONFIG.model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
-      max_tokens: 200
+      max_tokens: 200,
+      response_format: { type: 'json_object' }
     })
 
     try {
-      const result = JSON.parse(response.choices[0].message.content)
+      const result = parseJSON<{ insights: string[] }>(response.choices[0].message.content)
       this.agent.memories = [
         ...this.agent.memories.slice(0, -20),
         `Compressed insights: ${result.insights.join(' | ')}`
@@ -161,9 +184,16 @@ You improve over time by analyzing your successes and failures.
 Always respond with valid JSON.`
   }
 
-  private parseDecision(content: string): AgentAction {
+  private parseDecision(content: string | null): AgentAction {
     try {
-      return JSON.parse(content)
+      const parsed = parseJSON<Partial<AgentAction>>(content)
+      return {
+        agentId: this.agent.id,
+        action: parsed.action ?? 'observe',
+        target: parsed.target,
+        reasoning: parsed.reasoning ?? 'No reasoning provided',
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
+      }
     } catch {
       return {
         agentId: this.agent.id,

@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Multi-Event Radar"
+  short_description: "Rank upcoming events by ICP density across a date window."
+  default_prompt: "Use $multi-event-radar to choose which events to attend or sponsor."

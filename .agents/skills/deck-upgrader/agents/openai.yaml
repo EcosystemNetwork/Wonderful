@@ -1,0 +1,4 @@
+interface:
+  display_name: "Deck Upgrader"
+  short_description: "Turn a flat deck into an interactive, branded web slideshow spec."
+  default_prompt: "Use $deck-upgrader to upgrade this presentation."

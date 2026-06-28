@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Nebius Token Factory Integration"
+  short_description: "Wire any LLM tool to Nebius Token Factory with a verified smoke test."
+  default_prompt: "Use $nebius-token-factory-integration to wire this tool to Nebius Token Factory and verify it end-to-end."

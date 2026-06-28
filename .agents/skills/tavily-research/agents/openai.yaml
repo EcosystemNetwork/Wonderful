@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tavily Research"
+  short_description: "Live web research router built on the Tavily MCP."
+  default_prompt: "Use $tavily-research to research this on the live web."

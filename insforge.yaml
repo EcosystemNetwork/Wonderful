@@ -11,8 +11,12 @@ services:
         value: production
       - key: VITE_NEBIUS_API_KEY
         sync: false
-      - key: VITE_SIA_GATEWAY
-        value: https://sia.tech/gateway
+      - key: VITE_INSFORGE_URL
+        sync: false
+      - key: VITE_INSFORGE_ANON_KEY
+        sync: false
+      - key: VITE_MESHY_API_KEY
+        sync: false
     ports:
       - port: 3000
         http: true
@@ -36,8 +40,10 @@ services:
     env:
       - key: NEBIUS_API_KEY
         sync: false
-      - key: SIA_GATEWAY
-        value: https://sia.tech/gateway
+      - key: INSFORGE_URL
+        sync: false
+      - key: INSFORGE_ANON_KEY
+        sync: false
       - key: MESHY_API_KEY
         sync: false
     scaling:

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nebius"
+  short_description: "Manage Nebius AI Cloud infrastructure with the CLI."
+  default_prompt: "Use $nebius to deploy or manage this Nebius AI Cloud infrastructure."

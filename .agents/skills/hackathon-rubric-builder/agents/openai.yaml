@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hackathon Rubric Builder"
+  short_description: "Build a complete hackathon judging rubric, scoring guide, and judge briefing doc."
+  default_prompt: "Use $hackathon-rubric-builder to create judging criteria for my hackathon."

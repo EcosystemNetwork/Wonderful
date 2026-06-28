@@ -1,0 +1,4 @@
+interface:
+  display_name: "DevRel Strategy Doc"
+  short_description: "Generate a complete DevRel strategy document with OKRs, 90-day plan, channel strategy, and budget framework."
+  default_prompt: "Use $devrel-strategy-doc to write a DevRel strategy for my company."

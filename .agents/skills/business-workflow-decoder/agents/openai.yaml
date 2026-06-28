@@ -1,0 +1,4 @@
+interface:
+  display_name: "Business Workflow Decoder"
+  short_description: "Map messy work into reusable workflows."
+  default_prompt: "Use $business-workflow-decoder to turn this messy business process into a reusable workflow."

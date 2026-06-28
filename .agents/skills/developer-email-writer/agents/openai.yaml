@@ -1,0 +1,4 @@
+interface:
+  display_name: "Developer Email Writer"
+  short_description: "Write trust-first email copy for a developer audience."
+  default_prompt: "Use $developer-email-writer to draft this email for a developer audience."

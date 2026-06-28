@@ -1,0 +1,4 @@
+interface:
+  display_name: "Demo Pitch Polish"
+  short_description: "Turn a raw demo into a punchy, high-conversion pitch."
+  default_prompt: "Use $demo-pitch-polish to make my demo pitch land."

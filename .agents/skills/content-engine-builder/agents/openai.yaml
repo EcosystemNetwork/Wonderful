@@ -1,0 +1,4 @@
+interface:
+  display_name: "Content Engine Builder"
+  short_description: "Repurpose ideas into a content engine."
+  default_prompt: "Use $content-engine-builder to turn this source idea into a reusable content engine."

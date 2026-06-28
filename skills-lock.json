@@ -1,0 +1,335 @@
+{
+  "version": 1,
+  "skills": {
+    "agent-deploy-kubeclaw": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "agent-deploy-kubeclaw/SKILL.md",
+      "computedHash": "3854c67a75f36f2a1661203a9feac49b8059adf41660b91bff95fb0bca8bc6bc"
+    },
+    "agent-identity-resolver": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "agent-identity-resolver/SKILL.md",
+      "computedHash": "a07d596aadb3f6fd0198b6bc9c7b5cc23249c466d0d985b4e1ca3fe58ec379d8"
+    },
+    "agent-opportunity-audit": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "agent-opportunity-audit/SKILL.md",
+      "computedHash": "5caf5555d83e6769325acdb66574364479053bc33c2982ae77431bba9a44372c"
+    },
+    "agentic-engineering": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "agentic-engineering/SKILL.md",
+      "computedHash": "ac19380bcb0f5c04d43159eaa3aff38becda96510ed48784371bda3884b91b66"
+    },
+    "agentic-engineering-audit": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "agentic-engineering-audit/SKILL.md",
+      "computedHash": "571f54031608d2ed8b7da8d116aaef8ea732449d0a2bc52439a9f79a1e3e6fb1"
+    },
+    "ai-skill-writer": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "ai-skill-writer/SKILL.md",
+      "computedHash": "aa58777baee77479c23d7111c80f3b62ba118b289207ef6b190d230167e0d18b"
+    },
+    "ambassador-program-builder": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "ambassador-program-builder/SKILL.md",
+      "computedHash": "51e2c3036dfad38fe7c6bbab8032e50c654367bf4b9faa125d605189ad82de8c"
+    },
+    "api-key-hygiene": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "api-key-hygiene/SKILL.md",
+      "computedHash": "0824c2300989a34182ba23cdc74521c18c3556f8e2e0bb417890f2a60545d253"
+    },
+    "brand-visibility-tracker": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "brand-visibility-tracker/SKILL.md",
+      "computedHash": "5f560c509c7adf9582baf582548b16df15d2da2cc3f12b6cd5ae487701d87ac5"
+    },
+    "business-workflow-decoder": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "business-workflow-decoder/SKILL.md",
+      "computedHash": "a6e01daaaa317c1bf5c91741ba8a6cbc050d763c3fd25e45ecf84714a36f57d7"
+    },
+    "client-delivery-copilot": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "client-delivery-copilot/SKILL.md",
+      "computedHash": "b15d7846eafeb29259b3f2fb4bf941179fd06883e80c3356c289a6e037eeab20"
+    },
+    "coding-agent-bench-runner": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "coding-agent-bench-runner/SKILL.md",
+      "computedHash": "a5e4a61b390fe9ec65a66cabd3bfb52489221bf2634ad25f495d7cd86417e703"
+    },
+    "community-launch-kit": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "community-launch-kit/SKILL.md",
+      "computedHash": "0ab78737d1e4e2d9b1d266a4485b14a4964e0242a967e6656de9ba042b5323c9"
+    },
+    "community-space-ops": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "community-space-ops/SKILL.md",
+      "computedHash": "477c1e7bbb2c9daa30e5033963d3073efe2111e7bdbe1f9afedabf00c96ab4bb"
+    },
+    "content-engine-builder": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "content-engine-builder/SKILL.md",
+      "computedHash": "9429a5a25334b46f808f8cf91874d909edb9ebca71f0dbee790e07a463d7c8b1"
+    },
+    "contree": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "contree/SKILL.md",
+      "computedHash": "fa15a2dedc7590d5f807793adebaf0424784a4e2ded7dbe2e61ae9713e609ecf"
+    },
+    "coral": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "coral/SKILL.md",
+      "computedHash": "415c43411b536c9232d50e9bab8803fb59c797ca4e03884e360751a4d2ab5c42"
+    },
+    "coral-create-source-spec": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "coral-create-source-spec/SKILL.md",
+      "computedHash": "241f6e4dc991e63d349807c48c10d17b4335e3dbb8065b19b1d961817b97f751"
+    },
+    "coral-review-source-spec": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "coral-review-source-spec/SKILL.md",
+      "computedHash": "7792f252833ba7c39a54c9fbd16ac43e15d5d105a355b2bdb3222bac505991c9"
+    },
+    "deck-upgrader": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "deck-upgrader/SKILL.md",
+      "computedHash": "9ef7e4d90ee2c83e729cde9ac84719905cb59d869b5e7a082c0f1c8698785c81"
+    },
+    "demo-pitch-polish": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "demo-pitch-polish/SKILL.md",
+      "computedHash": "2a28541742c23b619cb1b2086e21963d8c04da1f130e17ec0733eff309c5f956"
+    },
+    "developer-email-writer": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "developer-email-writer/SKILL.md",
+      "computedHash": "40663b465f469b096bb1cecc9f7a3f64bc3289218bd76df4db16c620e018ed77"
+    },
+    "devrel-as-a-service-proposal": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "devrel-as-a-service-proposal/SKILL.md",
+      "computedHash": "281e30630da301bbd5a7a7de9e88979696bcbed364caaaa65b81a79206dd39ce"
+    },
+    "devrel-content-multiplier": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "devrel-content-multiplier/SKILL.md",
+      "computedHash": "c3929b901fdf4c37e6d6cc08e76d4cf179646dc13692f14168ca849f2f9761a9"
+    },
+    "devrel-email-sequence": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "devrel-email-sequence/SKILL.md",
+      "computedHash": "b0b1433616d3385c52902e313f4d13d721e478d5262ee4813fe77b2d830d9e06"
+    },
+    "devrel-strategy-builder": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "devrel-strategy-builder/SKILL.md",
+      "computedHash": "563865e8159b3dfbb9d16a9bc82e53eed1349496d1d455b9e17a50d554fef8bf"
+    },
+    "devrel-strategy-doc": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "devrel-strategy-doc/SKILL.md",
+      "computedHash": "6e5d682b85cc762fb50379bdd4fd27d78cc0b6759366ca1245bc62f76bc52520"
+    },
+    "event-brief-generator": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "event-brief-generator/SKILL.md",
+      "computedHash": "e514cd4a670a4607e71b666fefd35d77c6253b098ec51cf181ebfa9a4de66d96"
+    },
+    "event-leads": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "event-leads/SKILL.md",
+      "computedHash": "f7dd51a2902e6e48bad807b83a4cfefbe4e8d3ffa4e598beffde7a425ad9f55b"
+    },
+    "event-page-generator": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "event-page-generator/SKILL.md",
+      "computedHash": "9f882dd4befeb16cf9ba672f77bf64109772884f0198a5033a9bf9f3613591ca"
+    },
+    "event-radar": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "event-radar/SKILL.md",
+      "computedHash": "492a3797d19d4546d99259afaa66d704a97133b2aff1c6b95af9ea64135f0511"
+    },
+    "event-recap-report": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "event-recap-report/SKILL.md",
+      "computedHash": "98382a109faf6d0c1edad215005a05c518ecf3bddb49b8814a4b3d883550faa7"
+    },
+    "founder-stage-diagnosis": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "founder-stage-diagnosis/SKILL.md",
+      "computedHash": "d0a812a9d916917bcdd76a08319fc8ba2d0e162a6d0c87c0f103ff813c31266c"
+    },
+    "hackathon-in-a-box": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "hackathon-in-a-box/SKILL.md",
+      "computedHash": "fb15abf714a2f70aa595fed14a0bcefd1330763c402a5c356efd2050535b2785"
+    },
+    "hackathon-orchestration": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "hackathon-orchestration/SKILL.md",
+      "computedHash": "63be2f11c165c9b6228ae7053b328f0d3f2a506c805b16f9481061336dd28c55"
+    },
+    "hackathon-rubric-builder": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "hackathon-rubric-builder/SKILL.md",
+      "computedHash": "db51c85ea95d64ef1d4435340a84cd3f6f48effb5891acd65a057d70e8d02a7e"
+    },
+    "inference-stack-picker": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "inference-stack-picker/SKILL.md",
+      "computedHash": "609598d702622716c644c2b8fa48ebafcd575552753231e00e16a47e37d09061"
+    },
+    "integration-quickstart-generator": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "integration-quickstart-generator/SKILL.md",
+      "computedHash": "63beba6f86773446fdc0983e10a033530faa8c55682db29bf12f5d6f280703fb"
+    },
+    "mcp-server-scaffold": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "mcp-server-scaffold/SKILL.md",
+      "computedHash": "6ec158d918ad02a88d39ab274dd2838ccf23928d172874582788fc851e72bdb3"
+    },
+    "meeting-to-momentum": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "meeting-to-momentum/SKILL.md",
+      "computedHash": "ba75c15e85a8e127ee4b6fbe1606a144e0952f23329a159b5e6498dac7c62e96"
+    },
+    "multi-event-radar": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "multi-event-radar/SKILL.md",
+      "computedHash": "0c65a6318b0fc0aee053ce12f7aa6e748cedd637f70b5e3b7cf103f4595d2c40"
+    },
+    "nebius": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "nebius/SKILL.md",
+      "computedHash": "a3765d2d174a38436f8cc68bf7c090ad3ba27c61cf596ed0939d2cafc0baa59c"
+    },
+    "nebius-token-factory-integration": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "nebius-token-factory-integration/SKILL.md",
+      "computedHash": "de842caa589dd0e24dc3b72a6e2150f9ebf315f079d0f76f3fbc88ea48210806"
+    },
+    "offer-sharpening-agent": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "offer-sharpening-agent/SKILL.md",
+      "computedHash": "2d0a19c072589ecdbd79a19fd1899e069a53f8b105c17d71b8a936128b489400"
+    },
+    "revops-agent-factory": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "revops-agent-factory/SKILL.md",
+      "computedHash": "8387f399a979a77f16d22a92e3ceb77751b3dd63d7128ae316d8ec107b9d1b7e"
+    },
+    "sop-from-screen-recording": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "sop-from-screen-recording/SKILL.md",
+      "computedHash": "3abab19c2e75ebba5b0a54c731cc2b7327ccb12fd64dc90529a431f3d991ac91"
+    },
+    "speaker-outreach-dm": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "speaker-outreach-dm/SKILL.md",
+      "computedHash": "fcb148cfa3642f12f4bbb35fde054dba94657d5704d7e0acdfd8a0f61448d0ae"
+    },
+    "sponsor-marketplace-matcher": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "sponsor-marketplace-matcher/SKILL.md",
+      "computedHash": "10a374b65d0f8a2ad2691c019953ee4a1ed1b90dec771da8e140cb795f814179"
+    },
+    "sponsor-outreach-kit": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "sponsor-outreach-kit/SKILL.md",
+      "computedHash": "41750bdb440a82e0cb946b933fc4530daa805f6dd91134044d5fb9943126b41c"
+    },
+    "sponsor-pitch-deck": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "sponsor-pitch-deck/SKILL.md",
+      "computedHash": "00445ae63090fbbfa5060c17013bad5e97b339db6a5e4a00ec2b58e909962cf1"
+    },
+    "tavily-research": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "tavily-research/SKILL.md",
+      "computedHash": "398f47ff43ba5ef71de08b90254e6e73e019ccf4efe02af13c231f035aaeef35"
+    },
+    "transcript-to-podcast": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "transcript-to-podcast/SKILL.md",
+      "computedHash": "cdf565fb9bad575c4b377f934cdd2af0170753f9f5a812ac9ac58fd5675bf198"
+    },
+    "vapi": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "vapi/SKILL.md",
+      "computedHash": "76b3f7e577750b79bd6c7a99274f73dcd91b123b4e2f822108449d5accb89b21"
+    },
+    "venue-event-calendar": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "venue-event-calendar/SKILL.md",
+      "computedHash": "94090438c5c1b33e27602efedb41275395e9014f403169e572be40e7fa28d05d"
+    },
+    "voice-agent-spec": {
+      "source": "opencolin/skills",
+      "sourceType": "github",
+      "skillPath": "voice-agent-spec/SKILL.md",
+      "computedHash": "35d877eead0f62be4b7d78ed7099cfaeae8db89a55d8c9444056b2350fa7239e"
+    }
+  }
+}

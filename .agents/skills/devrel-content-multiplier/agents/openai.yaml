@@ -1,0 +1,4 @@
+interface:
+  display_name: "DevRel Content Multiplier"
+  short_description: "Turn one asset into thread, post, newsletter, and blog."
+  default_prompt: "Use $devrel-content-multiplier to repurpose this into multiple channels."

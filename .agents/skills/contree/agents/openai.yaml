@@ -1,0 +1,4 @@
+interface:
+  display_name: "ConTree"
+  short_description: "Run code in branchable sandboxed containers."
+  default_prompt: "Use $contree to run this work in isolated branchable sandboxes."

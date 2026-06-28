@@ -1,0 +1,4 @@
+interface:
+  display_name: "Event Brief Generator"
+  short_description: "Generate a Luma event description, email blast, and social media copy from minimal event inputs."
+  default_prompt: "Use $event-brief-generator to write copy for my developer event."

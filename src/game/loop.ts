@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useAgentStore } from '../game/store'
 import { SelfImprovingAgent } from '../game/agent'
 import { NebiusClient } from '../api/nebius'
-import { SiaStorage } from '../storage/sia'
+import { saveMemory, saveRun } from '../api/insforge'
 import { Challenge } from '../game/types'
 
 /**
@@ -10,12 +10,13 @@ import { Challenge } from '../game/types'
  * Manages turns, challenges, agent decisions, and self-improvement
  */
 export function useGameLoop() {
-  const { agents, gameState, setGameState, updateAgent, addMemory } = useAgentStore()
+  const { agents, gameState, setGameState, updateAgent, addMemory, nebiusApiKey } = useAgentStore()
   const [isRunning, setIsRunning] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
 
-  const nebius = new NebiusClient(import.meta.env.VITE_NEBIUS_API_KEY || '')
-  const sia = new SiaStorage()
+  // Rebuild the client only when the active key changes (set by Connect in Game.tsx,
+  // defaulting to VITE_NEBIUS_API_KEY). Avoids a fresh client on every render.
+  const nebius = useMemo(() => new NebiusClient(nebiusApiKey), [nebiusApiKey])
 
   const addLog = (msg: string) => {
     setLogs(prev => [...prev.slice(-50), `[T${gameState.turn}] ${msg}`])
@@ -85,22 +86,20 @@ export function useGameLoop() {
           memories: [...agent.memories, action.reasoning],
         })
 
-        // Store memory on Sia
+        // Persist memory to InsForge (auto-falls back to localStorage)
         const memory = {
           id: `mem-${Date.now()}-${agent.id}`,
           agentId: agent.id,
           content: action.reasoning,
           timestamp: Date.now(),
           importance: action.confidence,
+          turn: gameState.turn,
         }
-        
-        try {
-          const result = await sia.storeMemory(memory)
-          addMemory({ ...memory, siaHash: result.hash })
-        } catch {
-          // Fallback to local storage
-          sia.storeLocal(memory)
-          addMemory(memory)
+
+        const result = await saveMemory(memory)
+        addMemory({ ...memory, storageKey: result.key })
+        if (result.backend === 'insforge') {
+          addLog(`  ↳ memory saved to InsForge (${result.key.slice(0, 8)})`)
         }
 
         // Check for level up
@@ -154,6 +153,21 @@ export function useGameLoop() {
     if (gameState.turn >= gameState.maxTurns) {
       setGameState({ phase: 'ended' })
       addLog('Game Over!')
+
+      // Record each agent's run to the InsForge leaderboard
+      for (const agent of agents) {
+        const score = agent.level * 1000 + agent.xp
+        const result = await saveRun({
+          agent_name: agent.name,
+          agent_role: agent.role,
+          level: agent.level,
+          xp: agent.xp,
+          turns: gameState.turn,
+          final_strategy: agent.strategy,
+          score,
+        })
+        addLog(`${agent.name} scored ${score} → saved to ${result.backend}`)
+      }
     }
 
     setIsRunning(false)

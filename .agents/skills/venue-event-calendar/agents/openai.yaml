@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Venue Event Calendar"
+  short_description: "Build a balanced 30/60/90-day programming calendar for a physical venue."
+  default_prompt: "Use $venue-event-calendar to plan a programming calendar for this venue."

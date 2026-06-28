@@ -1,0 +1,4 @@
+interface:
+  display_name: "API Key Hygiene"
+  short_description: "Audit a repo for exposed secrets and fix them safely."
+  default_prompt: "Use $api-key-hygiene to check this repo for exposed keys."

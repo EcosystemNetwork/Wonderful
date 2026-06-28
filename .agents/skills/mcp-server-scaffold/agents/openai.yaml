@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "MCP Server Scaffold"
+  short_description: "Scaffold a security-first MCP server with auth, rate limits, and audit logs."
+  default_prompt: "Use $mcp-server-scaffold to scaffold an MCP server for this backing service."

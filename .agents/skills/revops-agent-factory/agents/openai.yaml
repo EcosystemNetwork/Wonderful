@@ -1,0 +1,4 @@
+interface:
+  display_name: "RevOps Agent Factory"
+  short_description: "Read-only-first RevOps/sales/marketing agents with a write gate."
+  default_prompt: "Use $revops-agent-factory to analyze our pipeline and deals."

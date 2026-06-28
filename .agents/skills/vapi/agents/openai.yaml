@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vapi"
+  short_description: "Manage Vapi voice agents, calls, numbers, tools, and webhooks."
+  default_prompt: "Use $vapi to manage this Vapi voice-agent workflow."

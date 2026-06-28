@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agentic Engineering"
+  short_description: "Reference for building reliable autonomous agents."
+  default_prompt: "Use $agentic-engineering to help me design this agent system."

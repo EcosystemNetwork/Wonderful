@@ -15,6 +15,8 @@ export interface Agent {
   personality: string
   strategy: string
   improvementLog: ImprovementEntry[]
+  /** URL to a Meshy-generated .glb model (InsForge-stored when available). */
+  modelUrl?: string
 }
 
 export interface ImprovementEntry {
@@ -32,7 +34,8 @@ export interface Memory {
   embedding?: number[]
   timestamp: number
   importance: number
-  siaHash?: string
+  turn?: number
+  storageKey?: string
 }
 
 export interface GameState {

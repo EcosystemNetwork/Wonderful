@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Opportunity Audit"
+  short_description: "Find high-value AI agent opportunities."
+  default_prompt: "Use $agent-opportunity-audit to audit this business for practical AI agent opportunities."

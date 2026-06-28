@@ -1,6 +1,30 @@
 import OpenAI from 'openai'
 
 /**
+ * Nebius configuration.
+ *
+ * The OpenAI-compatible inference API (Nebius AI Studio) authenticates with a
+ * Bearer API key only — it does NOT take any of the console/Cloud identifiers
+ * below in the request body. The project / tenant IDs are kept here purely for
+ * reference and for any future Nebius AI Cloud (IAM) calls.
+ */
+export const NEBIUS_CONFIG = {
+  baseURL: 'https://api.studio.nebius.com/v1',
+  /**
+   * Default chat model. Override with VITE_NEBIUS_MODEL.
+   * DeepSeek V3 = best open reasoning + reliable JSON-mode adherence for the agent loop.
+   * Alternatives: 'openai/gpt-oss-120b' (faster), 'Qwen/Qwen3-235B-A22B-Instruct-2507'.
+   * Avoid reasoning models (DeepSeek-R1) — their <think> output breaks json_object parsing.
+   */
+  model: import.meta.env.VITE_NEBIUS_MODEL || 'deepseek-ai/DeepSeek-V3',
+  /** Nebius AI Cloud console identifiers (reference only). */
+  projectId: import.meta.env.VITE_NEBIUS_PROJECT_ID || 'project-e00a898kpr00dr28vrewyf',
+  tenantUserAccountId:
+    import.meta.env.VITE_NEBIUS_TENANT_USER_ID || 'tenantuseraccount-e00cr4vga00dbmmszb',
+  aiTenantId: import.meta.env.VITE_NEBIUS_AI_TENANT_ID || 'aitenant-e00pjzpecsqg8m9mfb',
+} as const
+
+/**
  * NebiusClient - Wrapper for Nebius AI Cloud API
  * Provides LLM inference for agent reasoning and strategy
  */
@@ -8,10 +32,16 @@ export class NebiusClient {
   private client: OpenAI
 
   constructor(apiKey: string) {
-    // Nebius uses OpenAI-compatible API
+    // Nebius uses OpenAI-compatible API.
+    // timeout + maxRetries give us the fallback/circuit-breaker the integration
+    // skill requires: a hung or 5xx call fails fast and retries with backoff
+    // instead of stalling the game loop.
     this.client = new OpenAI({
       apiKey,
-      baseURL: 'https://api.studio.nebius.com/v1',
+      baseURL: NEBIUS_CONFIG.baseURL,
+      dangerouslyAllowBrowser: true,
+      timeout: 60_000,
+      maxRetries: 2,
     })
   }
 
@@ -19,12 +49,16 @@ export class NebiusClient {
     return this.client
   }
 
+  get model(): string {
+    return NEBIUS_CONFIG.model
+  }
+
   async testConnection(): Promise<boolean> {
     try {
       const response = await this.client.chat.completions.create({
-        model: 'meta-llama/Meta-Llama-3.1-70B-Instruct',
+        model: NEBIUS_CONFIG.model,
         messages: [{ role: 'user', content: 'Hello' }],
-        max_tokens: 10
+        max_tokens: 10,
       })
       return response.choices.length > 0
     } catch (e) {

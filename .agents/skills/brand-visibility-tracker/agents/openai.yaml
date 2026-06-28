@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Brand Visibility Tracker"
+  short_description: "Track brand share-of-voice across major LLM assistants over time."
+  default_prompt: "Use $brand-visibility-tracker to measure how this brand shows up across LLM assistants."

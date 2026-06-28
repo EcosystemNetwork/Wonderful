@@ -1,0 +1,4 @@
+interface:
+  display_name: "DevRel Strategy Builder"
+  short_description: "Outside-in DevRel strategy plus a leave-behind one-pager."
+  default_prompt: "Use $devrel-strategy-builder to build a DevRel strategy for this product."

@@ -1,25 +1,29 @@
-import { useState, useRef, Suspense } from 'react'
+import { useState, useRef, useMemo, Suspense } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, Text, Box, Sphere } from '@react-three/drei'
+import { OrbitControls, Text, Box, Sphere, useGLTF } from '@react-three/drei'
 import { useAgentStore } from '../game/store'
 import { Agent } from '../game/types'
-import { NebiusClient } from '../api/nebius'
+import { NebiusClient, NEBIUS_CONFIG } from '../api/nebius'
 import { useGameLoop } from '../game/loop'
+import { isInsforgeConfigured } from '../api/insforge'
+import MeshyPanel from './MeshyPanel'
 import * as THREE from 'three'
 
+/** Loads and renders a Meshy-generated .glb model. Suspends while fetching. */
+function CharacterModel({ url }: { url: string }) {
+  const { scene } = useGLTF(url)
+  // Clone so the same cached model can be reused across multiple agents.
+  const model = useMemo(() => scene.clone(), [scene])
+  return <primitive object={model} scale={0.8} />
+}
+
 function AgentCharacter({ agent, position }: { agent: Agent; position: [number, number, number] }) {
-  const meshRef = useRef<THREE.Mesh>(null)
-  const groupRef = useRef<THREE.Group>(null)
-  
+  const innerRef = useRef<THREE.Group>(null)
+
   useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y = state.clock.elapsedTime * 0.5
-      meshRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 2) * 0.2
-    }
-    if (groupRef.current && agent.level > 1) {
-      const glowIntensity = 0.2 + (agent.level * 0.1)
-      const mat = meshRef.current?.material as THREE.MeshStandardMaterial
-      if (mat) mat.emissiveIntensity = glowIntensity
+    if (innerRef.current) {
+      innerRef.current.rotation.y = state.clock.elapsedTime * 0.5
+      innerRef.current.position.y = Math.sin(state.clock.elapsedTime * 2) * 0.2
     }
   })
 
@@ -31,10 +35,28 @@ function AgentCharacter({ agent, position }: { agent: Agent; position: [number, 
   }[agent.role] || '#888888'
 
   return (
-    <group ref={groupRef} position={position}>
-      <Sphere ref={meshRef} args={[0.5, 32, 32]}>
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.2} />
-      </Sphere>
+    <group position={position}>
+      <group ref={innerRef}>
+        {agent.modelUrl ? (
+          <Suspense
+            fallback={
+              <Sphere args={[0.5, 16, 16]}>
+                <meshStandardMaterial color={color} wireframe />
+              </Sphere>
+            }
+          >
+            <CharacterModel url={agent.modelUrl} />
+          </Suspense>
+        ) : (
+          <Sphere args={[0.5, 32, 32]}>
+            <meshStandardMaterial
+              color={color}
+              emissive={color}
+              emissiveIntensity={0.2 + (agent.level - 1) * 0.1}
+            />
+          </Sphere>
+        )}
+      </group>
       <Text
         position={[0, 0.8, 0]}
         fontSize={0.3}
@@ -110,20 +132,32 @@ function GameArena() {
 }
 
 export default function Game() {
-  const [apiKey, setApiKey] = useState('')
+  const { agents, addAgent, gameState, setGameState, nebiusApiKey, setNebiusApiKey } = useAgentStore()
+  const [apiKey, setApiKey] = useState(nebiusApiKey)
   const [isConnected, setIsConnected] = useState(false)
-  const { agents, addAgent, gameState, setGameState } = useAgentStore()
+  const [isConnecting, setIsConnecting] = useState(false)
   const { runTurn, autoRun, isRunning, logs } = useGameLoop()
   const nebiusRef = useRef<NebiusClient | null>(null)
 
   const connectNebius = async () => {
-    const client = new NebiusClient(apiKey)
-    const ok = await client.testConnection()
-    if (ok) {
-      nebiusRef.current = client
-      setIsConnected(true)
-    } else {
-      alert('Failed to connect to Nebius')
+    if (!apiKey.trim()) {
+      alert('Enter a Nebius API key first')
+      return
+    }
+    setIsConnecting(true)
+    try {
+      const client = new NebiusClient(apiKey.trim())
+      const ok = await client.testConnection()
+      if (ok) {
+        nebiusRef.current = client
+        // Persist the key so the game loop builds its client from the same key.
+        setNebiusApiKey(apiKey.trim())
+        setIsConnected(true)
+      } else {
+        alert('Failed to connect to Nebius — check the API key and model.')
+      }
+    } finally {
+      setIsConnecting(false)
     }
   }
 
@@ -175,6 +209,16 @@ export default function Game() {
             <p>Agents: {agents.length}</p>
             <p>Score: {gameState.score}</p>
           </div>
+          <div className="mt-2 flex items-center gap-1.5 text-xs">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isInsforgeConfigured ? 'bg-green-400' : 'bg-yellow-400'
+              }`}
+            />
+            <span className="text-gray-300">
+              {isInsforgeConfigured ? 'InsForge backend live' : 'InsForge: local mode'}
+            </span>
+          </div>
         </div>
         
         <div className="absolute top-4 right-4 bg-black/70 p-4 rounded-lg backdrop-blur max-w-xs">
@@ -204,12 +248,14 @@ export default function Game() {
           />
           <button
             onClick={connectNebius}
-            className={`w-full p-2 rounded font-bold ${
+            disabled={isConnecting}
+            className={`w-full p-2 rounded font-bold disabled:opacity-50 ${
               isConnected ? 'bg-green-600' : 'bg-blue-600 hover:bg-blue-500'
             }`}
           >
-            {isConnected ? 'Connected to Nebius' : 'Connect'}
+            {isConnecting ? 'Connecting…' : isConnected ? 'Connected to Nebius' : 'Connect'}
           </button>
+          <p className="mt-1 text-[10px] text-gray-400">Model: {NEBIUS_CONFIG.model}</p>
         </div>
 
         <div className="bg-gray-700 p-3 rounded">
@@ -227,6 +273,8 @@ export default function Game() {
             ))}
           </div>
         </div>
+
+        <MeshyPanel />
 
         <div className="bg-gray-700 p-3 rounded">
           <h2 className="font-bold mb-2">Game Controls</h2>

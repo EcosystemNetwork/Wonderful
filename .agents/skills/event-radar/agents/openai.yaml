@@ -1,0 +1,4 @@
+interface:
+  display_name: "Event Radar"
+  short_description: "Rank events and score event leads."
+  default_prompt: "Use $event-radar to decide which events to attend and who to pitch."

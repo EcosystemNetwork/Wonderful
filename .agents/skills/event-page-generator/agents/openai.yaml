@@ -1,0 +1,4 @@
+interface:
+  display_name: "Event Page Generator"
+  short_description: "Turn a rough event idea into a publish-ready page."
+  default_prompt: "Use $event-page-generator to turn this event idea into a ready-to-publish page."

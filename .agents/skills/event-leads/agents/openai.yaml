@@ -1,0 +1,4 @@
+interface:
+  display_name: "Event Lead Analysis"
+  short_description: "Turn a registration CSV into ranked, sponsor-scored leads."
+  default_prompt: "Use $event-leads to analyze this attendee CSV for our sponsors."

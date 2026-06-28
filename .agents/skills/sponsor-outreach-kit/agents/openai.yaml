@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sponsor Outreach Kit"
+  short_description: "Build a sponsorship package and outreach sequence."
+  default_prompt: "Use $sponsor-outreach-kit to package and pitch sponsors for this event."

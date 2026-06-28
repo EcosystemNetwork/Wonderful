@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Voice Agent Spec"
+  short_description: "Spec a production voice agent with latency budget and runnable starter."
+  default_prompt: "Use $voice-agent-spec to design a production voice agent for this use case."

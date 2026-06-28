@@ -1,0 +1,4 @@
+interface:
+  display_name: "DevRel Email Sequence"
+  short_description: "Write a 3–5 email developer onboarding, launch, or nurture sequence with subject lines, preview text, and full copy."
+  default_prompt: "Use $devrel-email-sequence to write a developer email sequence for my product."

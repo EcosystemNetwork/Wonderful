@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "DevRel As A Service Proposal"
+  short_description: "Draft a fractional DevRel SOW with funnel-aligned KPIs."
+  default_prompt: "Use $devrel-as-a-service-proposal to draft a fractional DevRel SOW for this client."

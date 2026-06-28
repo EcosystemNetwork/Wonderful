@@ -1,0 +1,4 @@
+interface:
+  display_name: "SOP From Screen Recording"
+  short_description: "Convert walkthroughs into clean SOPs."
+  default_prompt: "Use $sop-from-screen-recording to turn this walkthrough transcript into a clean SOP."

@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Event Recap Report"
+  short_description: "Post-event recap deliverable that drives sponsor renewals."
+  default_prompt: "Use $event-recap-report to produce the post-event recap and sponsor renewal asks."

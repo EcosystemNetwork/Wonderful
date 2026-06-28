@@ -1,0 +1,4 @@
+interface:
+  display_name: "Meeting To Momentum"
+  short_description: "Convert meetings into decisions and tasks."
+  default_prompt: "Use $meeting-to-momentum to turn these meeting notes into decisions, tasks, and follow-ups."

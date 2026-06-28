@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Agent Identity Resolver"
+  short_description: "Resolve and verify AID v2 agent identities with a trust report."
+  default_prompt: "Use $agent-identity-resolver to verify this agent identity via AID v2."

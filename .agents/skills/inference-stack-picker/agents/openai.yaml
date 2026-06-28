@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Inference Stack Picker"
+  short_description: "Pick the right LLM inference stack with cost-per-million math."
+  default_prompt: "Use $inference-stack-picker to recommend an inference stack for this workload."

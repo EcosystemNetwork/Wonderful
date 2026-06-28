@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ambassador Program Builder"
+  short_description: "Build a complete ambassador program for developer communities, DevRel programs, or AI/web3 ecosystems."
+  default_prompt: "Use $ambassador-program-builder to design an ambassador program for my community."

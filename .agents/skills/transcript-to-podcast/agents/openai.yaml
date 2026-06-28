@@ -1,0 +1,4 @@
+interface:
+  display_name: "Transcript to Podcast"
+  short_description: "Turn any transcript or doc into a multi-voice podcast script."
+  default_prompt: "Use $transcript-to-podcast to turn this into a podcast episode."

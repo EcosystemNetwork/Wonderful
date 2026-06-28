@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Agent Deploy via KubeClaw"
+  short_description: "Deploy an AI agent to Nebius Managed Kubernetes with Helm + observability."
+  default_prompt: "Use $agent-deploy-kubeclaw to deploy this agent to a Nebius Kubernetes cluster."

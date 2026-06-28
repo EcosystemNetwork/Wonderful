@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Agentic Engineering Audit"
+  short_description: "Score an AI agent on nine pillars and prescribe three fixes."
+  default_prompt: "Use $agentic-engineering-audit to review this agent or LLM system."

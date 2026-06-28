@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sponsor Pitch Deck"
+  short_description: "Generate a sponsor one-pager with tiers, audience value props, and outreach email for a developer event or community."
+  default_prompt: "Use $sponsor-pitch-deck to create a sponsorship pitch for my event."

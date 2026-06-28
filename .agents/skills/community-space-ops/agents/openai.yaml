@@ -1,0 +1,4 @@
+interface:
+  display_name: "Community Space Ops"
+  short_description: "Program and operate a community or events space."
+  default_prompt: "Use $community-space-ops to plan and run our community space."

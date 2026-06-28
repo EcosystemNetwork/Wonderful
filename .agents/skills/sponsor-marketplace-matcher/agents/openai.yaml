@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Sponsor Marketplace Matcher"
+  short_description: "Build a ranked sponsor target list before writing any outreach."
+  default_prompt: "Use $sponsor-marketplace-matcher to find the right sponsors for this event or program."

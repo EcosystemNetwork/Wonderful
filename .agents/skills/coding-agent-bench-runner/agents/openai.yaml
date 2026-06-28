@@ -1,0 +1,4 @@
+interface:
+  display_name: "Coding Agent Bench Runner"
+  short_description: "Benchmark coding agents x open models into a ranked leaderboard."
+  default_prompt: "Use $coding-agent-bench-runner to find the best agent and model for this."

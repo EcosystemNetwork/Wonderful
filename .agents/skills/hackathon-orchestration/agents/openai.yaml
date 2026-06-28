@@ -1,0 +1,5 @@
+---
+interface:
+  display_name: "Hackathon Orchestration"
+  short_description: "Run a hackathon live — judges, demos, incidents, and announcements."
+  default_prompt: "Use $hackathon-orchestration to handle this live hackathon coordination task."

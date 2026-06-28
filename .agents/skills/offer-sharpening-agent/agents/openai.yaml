@@ -1,0 +1,4 @@
+interface:
+  display_name: "Offer Sharpening Agent"
+  short_description: "Clarify offers, proof, pain, and CTA."
+  default_prompt: "Use $offer-sharpening-agent to sharpen this offer for a service business."

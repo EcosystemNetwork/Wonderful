@@ -8,13 +8,13 @@
 
 ## What is Wonderful?
 
-Wonderful is a **self-evolving AI party game** where each agent is powered by a real Large Language Model (Nebius AI), learns from every challenge, and permanently stores its memories on decentralized storage (Sia). The game combines:
+Wonderful is a **self-evolving AI party game** where each agent is powered by a real Large Language Model (Nebius AI), learns from every challenge, and persists its memories and run history to an **InsForge** backend. The game combines:
 
 - **AI-native gameplay**: Every decision is made by an LLM, not scripted
 - **Self-improvement**: Agents analyze their performance and evolve their strategies
-- **Decentralized memory**: Agent memories persist on Sia blockchain storage
+- **Persistent memory**: Agent memories + completed runs live in InsForge (Postgres) with a fallback to localStorage
 - **3D visualization**: Real-time Three.js arena with animated characters
-- **Meshy.ai integration**: Generate custom 3D characters from text prompts
+- **Meshy.ai integration**: Generate custom 3D characters, stored in InsForge Storage
 
 ---
 
@@ -43,9 +43,9 @@ Wonderful is a **self-evolving AI party game** where each agent is powered by a 
 ┌─────────────────────────────────────────────────────────────┐
 │                     EXTERNAL SERVICES                        │
 │  ├─ Nebius AI Cloud → LLM inference                         │
-│  ├─ Sia Storage → Decentralized agent memories              │
+│  ├─ InsForge → auth · DB (memories, runs) · model storage   │
 │  ├─ Meshy.ai → 3D character generation                    │
-│  └─ InsForge → Deployment & hosting                       │
+│  └─ InsForge → deployment & hosting                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -66,10 +66,11 @@ Each agent has:
 - Dynamic lighting and particle effects
 - XP bars and status overlays
 
-### 3. Decentralized Persistence
-- Agent memories stored on Sia (via sia_rust SDK)
-- Memories survive browser refreshes
-- Cross-session learning enabled
+### 3. InsForge-Backed Persistence
+- Agent memories + completed runs stored in InsForge Postgres (`agent_memories`, `agent_runs`)
+- Meshy `.glb` models persisted to InsForge Storage (`characters` bucket)
+- Optional email auth ties runs to a player; graceful localStorage fallback when offline
+- Memories survive browser refreshes; cross-session learning enabled
 
 ### 4. Meshy.ai 3D Pipeline
 - Text-to-3D character generation
@@ -86,7 +87,7 @@ Each agent has:
 | 3D Engine | Three.js, React Three Fiber, Drei |
 | State Management | Zustand |
 | AI/LLM | Nebius AI Cloud (OpenAI-compatible API) |
-| Storage | Sia (decentralized) |
+| Backend | InsForge (auth · Postgres · Storage) |
 | 3D Assets | Meshy.ai API |
 | Deployment | InsForge |
 

@@ -1,0 +1,109 @@
+name: wonderful-ai-game
+services:
+  - name: wonderful-game
+    type: web
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npx serve dist
+    env:
+      - key: NODE_ENV
+        value: production
+      - key: VITE_NEBIUS_API_KEY
+        sync: false
+      - key: VITE_SIA_GATEWAY
+        value: https://sia.tech/gateway
+    ports:
+      - port: 3000
+        http: true
+    healthCheck:
+      path: /
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    scaling:
+      min: 1
+      max: 3
+      metric: cpu
+      target: 70
+
+  - name: wonderful-api
+    type: worker
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: node dist/server.js
+    env:
+      - key: NEBIUS_API_KEY
+        sync: false
+      - key: SIA_GATEWAY
+        value: https://sia.tech/gateway
+      - key: MESHY_API_KEY
+        sync: false
+    scaling:
+      min: 1
+      max: 2
+
+  - name: agent-orchestrator
+    type: worker
+    runtime: node
+    plan: pro
+    buildCommand: npm install
+    startCommand: node scripts/agent-orchestrator.js
+    env:
+      - key: NEBIUS_API_KEY
+        sync: false
+      - key: INSFORGE_API_KEY
+        sync: false
+    scaling:
+      min: 1
+      max: 5
+      metric: custom
+      target: 50
+
+databases:
+  - name: wonderful-memories
+    type: postgres
+    plan: starter
+    version: "15"
+
+storage:
+  - name: wonderful-assets
+    type: s3
+    plan: starter
+    public: true
+
+networking:
+  - service: wonderful-game
+    domain: wonderful-game.insforge.dev
+    ssl: true
+    
+  - service: wonderful-api
+    domain: api.wonderful-game.insforge.dev
+    ssl: true
+
+monitoring:
+  enabled: true
+  metrics:
+    - cpu
+    - memory
+    - requests
+    - latency
+  alerts:
+    - name: high-latency
+      condition: latency > 500ms
+      duration: 5m
+      action: notify
+
+ai:
+  modelGateway:
+    enabled: true
+    providers:
+      - nebius
+      - openai
+    rateLimit: 1000/min
+  
+  agentRuntime:
+    enabled: true
+    observability: true
+    evals: true

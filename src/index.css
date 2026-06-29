@@ -14,3 +14,53 @@ body {
   width: 100vw;
   height: 100vh;
 }
+
+/* Agent thought bubbles (drei <Html>) ------------------------------------- */
+@keyframes thoughtIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.thought-bubble {
+  animation: thoughtIn 180ms ease-out;
+}
+
+.thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+}
+
+.thinking-dots i {
+  width: 3px;
+  height: 3px;
+  margin-left: 2px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.3;
+  animation: thinkingBlink 1s infinite;
+}
+
+.thinking-dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinking-dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes thinkingBlink {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}

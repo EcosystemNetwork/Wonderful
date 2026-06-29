@@ -1,9 +1,12 @@
 import { create } from 'zustand'
-import { Agent, GameState, Memory } from './types'
+import { Agent, GameState, Memory, WorldEvent } from './types'
 import { ChatMessage } from '../api/claude'
 
-/** Top-level UI flow: landing → summon party → enter arena. */
-export type Screen = 'landing' | 'summon' | 'game'
+/** Top-level UI flow: character select (the gate) → create → enter arena. */
+export type Screen = 'landing' | 'select' | 'summon' | 'game'
+
+/** Sentinel stored as an agent's thought while its Nebius decision is in flight. */
+export const THINKING = 'thinking'
 
 interface AgentStore {
   screen: Screen
@@ -30,6 +33,27 @@ interface AgentStore {
   controlledAgentId: string | null
   setControlledAgentId: (id: string | null) => void
 
+  /**
+   * Live reasoning per agent, shown as a floating thought bubble in the arena.
+   * Set to the `THINKING` sentinel while a decision is in flight, then to the
+   * agent's actual Nebius reasoning. Cleared at the start of each turn.
+   */
+  thoughts: Record<string, string>
+  setThought: (agentId: string, text: string) => void
+  clearThoughts: () => void
+
+  // --- Real-time simulation --------------------------------------------------
+  /** Whether the live, real-time agent simulation is currently running. */
+  simRunning: boolean
+  setSimRunning: (running: boolean) => void
+  /** The ambient world situation all agents perceive; the director rotates it. */
+  situation: string
+  setSituation: (situation: string) => void
+  /** Rolling feed of recent agent actions; agents react to each other via this. */
+  events: WorldEvent[]
+  pushEvent: (event: WorldEvent) => void
+  clearEvents: () => void
+
   addAgent: (agent: Agent) => void
   updateAgent: (id: string, updates: Partial<Agent>) => void
   removeAgent: (id: string) => void
@@ -38,7 +62,8 @@ interface AgentStore {
 }
 
 export const useAgentStore = create<AgentStore>((set) => ({
-  screen: 'landing',
+  // Character select is the front gate — no one reaches the arena without a character.
+  screen: 'select',
   setScreen: (screen) => set({ screen }),
 
   agents: [],
@@ -62,6 +87,19 @@ export const useAgentStore = create<AgentStore>((set) => ({
 
   controlledAgentId: null,
   setControlledAgentId: (controlledAgentId) => set({ controlledAgentId }),
+
+  thoughts: {},
+  setThought: (agentId, text) =>
+    set((s) => ({ thoughts: { ...s.thoughts, [agentId]: text } })),
+  clearThoughts: () => set({ thoughts: {} }),
+
+  simRunning: false,
+  setSimRunning: (simRunning) => set({ simRunning }),
+  situation: 'The arena hums with latent energy. Nothing stirs yet.',
+  setSituation: (situation) => set({ situation }),
+  events: [],
+  pushEvent: (event) => set((s) => ({ events: [...s.events.slice(-49), event] })),
+  clearEvents: () => set({ events: [] }),
 
   addAgent: (agent) =>
     set((state) => ({

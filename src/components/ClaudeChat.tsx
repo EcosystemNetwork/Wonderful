@@ -6,6 +6,7 @@ import {
   CLAUDE_PROXY_CONFIG,
   ChatMessage,
 } from '../api/claude'
+import { saveChatMessage, listChat } from '../api/insforge'
 import { parseAiActions, executeAiActions, stripActionBlocks } from '../game/aiActions'
 
 /** Builds a system prompt that drops Claude into the game with live context. */
@@ -82,13 +83,31 @@ export default function ClaudeChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Restore the persisted transcript once on mount (only if we don't already
+  // have messages this session, so we never duplicate the live conversation).
+  useEffect(() => {
+    if (chat.length > 0) return
+    let cancelled = false
+    listChat().then((history) => {
+      if (cancelled || chat.length > 0) return
+      history.forEach((m) => addChat(m))
+    })
+    return () => {
+      cancelled = true
+    }
+    // run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const send = async () => {
     const text = input.trim()
     if (!text || sending) return
     setInput('')
     setError(null)
-    const next: ChatMessage[] = [...chat, { role: 'user', content: text }]
-    addChat({ role: 'user', content: text })
+    const userMsg: ChatMessage = { role: 'user', content: text }
+    const next: ChatMessage[] = [...chat, userMsg]
+    addChat(userMsg)
+    void saveChatMessage(userMsg)
     setSending(true)
     try {
       const reply = await chatWithClaude(next, buildSystemPrompt())
@@ -98,7 +117,12 @@ export default function ClaudeChat() {
       const notes = actions.length ? executeAiActions(actions) : []
       const prose = stripActionBlocks(reply) || (notes.length ? 'Done.' : reply)
       const summary = notes.length ? `✦ ${notes.join(' · ')}` : ''
-      addChat({ role: 'assistant', content: [prose, summary].filter(Boolean).join('\n\n') })
+      const assistantMsg: ChatMessage = {
+        role: 'assistant',
+        content: [prose, summary].filter(Boolean).join('\n\n'),
+      }
+      addChat(assistantMsg)
+      void saveChatMessage(assistantMsg)
     } catch (e) {
       setError(String(e))
     } finally {

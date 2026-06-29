@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAgentStore } from '../game/store'
 import { Agent } from '../game/types'
+import { saveAgent } from '../api/insforge'
 
 const ROLES: {
   role: Agent['role']
@@ -33,6 +34,8 @@ export function makeAgent(name: string, role: Agent['role']): Agent {
     personality: 'curious, strategic',
     strategy: 'Explore and learn from surroundings',
     improvementLog: [],
+    clearance: 0,
+    knowledge: 0,
   }
 }
 
@@ -45,7 +48,10 @@ export default function Summon() {
     const finalName =
       name.trim() ||
       `${role.charAt(0).toUpperCase() + role.slice(1)}-${Date.now().toString(36).slice(-4)}`
-    addAgent(makeAgent(finalName, role))
+    const agent = makeAgent(finalName, role)
+    addAgent(agent)
+    // Persist the new character to InsForge (auto-falls back to localStorage).
+    void saveAgent(agent)
     setName('')
   }
 
@@ -53,10 +59,10 @@ export default function Summon() {
     <div className="w-full h-screen bg-gray-950 text-white overflow-y-auto">
       <div className="max-w-4xl mx-auto px-6 py-10">
         <button
-          onClick={() => setScreen('landing')}
+          onClick={() => setScreen('select')}
           className="text-sm text-gray-400 hover:text-white mb-6"
         >
-          ← Back
+          ← Character Select
         </button>
 
         <h1 className="text-4xl font-black mb-1 bg-gradient-to-r from-fuchsia-400 to-blue-400 bg-clip-text text-transparent">

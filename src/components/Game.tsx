@@ -1,15 +1,19 @@
 import { useState, useRef, useMemo, useEffect, Suspense } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, Text, Box, Sphere, useGLTF } from '@react-three/drei'
-import { useAgentStore } from '../game/store'
+import { OrbitControls, Text, Box, Sphere, useGLTF, Html } from '@react-three/drei'
+import { useAgentStore, THINKING } from '../game/store'
 import { Agent } from '../game/types'
 import { NebiusClient } from '../api/nebius'
 import { useGameLoop } from '../game/loop'
+import { SECTOR_COUNT, SECTOR_SPAN, gateZ, sectorCenterZ, sectorBounds, clearanceLabel, clearanceProgress } from '../game/progression'
 import { isInsforgeConfigured } from '../api/insforge'
 import MeshyPanel from './MeshyPanel'
+import LiveControls from './LiveControls'
 import ErrorBoundary from './ErrorBoundary'
 import Leaderboard from './Leaderboard'
 import ClaudeChat from './ClaudeChat'
+import StoryFeed from './StoryFeed'
+import CraftPanel from './CraftPanel'
 import * as THREE from 'three'
 
 const ROLE_COLOR: Record<Agent['role'], string> = {
@@ -60,7 +64,7 @@ function AgentLabels({ agent }: { agent: Agent }) {
         {agent.name}
       </Text>
       <Text position={[0, -0.8, 0]} fontSize={0.2} color="#aaa" anchorX="center" anchorY="middle">
-        Lv.{agent.level} {agent.role}
+        {agent.role} · {agent.clearance > 0 ? `🔑 ${clearanceLabel(agent.clearance)}` : 'UNCLEARED'}
       </Text>
       <Box args={[0.8, 0.05, 0.05]} position={[0, -1, 0]}>
         <meshStandardMaterial color="#333" />
@@ -72,21 +76,112 @@ function AgentLabels({ agent }: { agent: Agent }) {
   )
 }
 
-/** Non-controlled agent: idles with a gentle spin + bob. */
-function IdleAgent({ agent, position }: { agent: Agent; position: [number, number, number] }) {
-  const inner = useRef<THREE.Group>(null)
-  useFrame((state) => {
-    if (inner.current) {
-      inner.current.rotation.y = state.clock.elapsedTime * 0.5
-      inner.current.position.y = Math.sin(state.clock.elapsedTime * 2) * 0.2
-    }
-  })
+/**
+ * Floating thought bubble that shows an agent's live Nebius reasoning above its
+ * head — "thinking…" while a decision is in flight, then the actual rationale.
+ */
+function ThoughtBubble({ agentId }: { agentId: string }) {
+  const thought = useAgentStore((s) => s.thoughts[agentId])
+  if (!thought) return null
+  const thinking = thought === THINKING
+  const text = thought.length > 150 ? `${thought.slice(0, 150).trimEnd()}…` : thought
   return (
-    <group position={position}>
-      <group ref={inner}>
-        <AgentBody agent={agent} />
-      </group>
+    <Html
+      position={[0, 1.75, 0]}
+      center
+      distanceFactor={9}
+      zIndexRange={[20, 0]}
+      style={{ pointerEvents: 'none', userSelect: 'none' }}
+    >
+      <div className="thought-bubble" style={{ width: 184 }}>
+        <div className="rounded-2xl border border-fuchsia-400/40 bg-black/80 px-3 py-2 text-[11px] leading-snug text-fuchsia-50 shadow-lg shadow-fuchsia-500/20 backdrop-blur">
+          {thinking ? (
+            <span className="inline-flex items-center text-fuchsia-200">
+              💭 thinking
+              <span className="thinking-dots">
+                <i />
+                <i />
+                <i />
+              </span>
+            </span>
+          ) : (
+            <span>
+              <span className="opacity-60">💭 </span>
+              {text}
+            </span>
+          )}
+        </div>
+        {/* tail pointing down toward the character */}
+        <div className="mx-auto mt-0.5 flex w-4 flex-col items-center gap-0.5">
+          <span className="block h-1.5 w-1.5 rounded-full border border-fuchsia-400/30 bg-black/80" />
+          <span className="block h-1 w-1 rounded-full bg-black/70" />
+        </div>
+      </div>
+    </Html>
+  )
+}
+
+/** Stable 0..1 value from a string, so each agent gets a consistent spawn spot. */
+function hash01(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return (h % 997) / 997
+}
+
+/**
+ * Non-controlled agent: autonomously wanders inside the sector matching its
+ * clearance — walking to random spots, turning to face travel, and bobbing like
+ * a gait. When it earns clearance, its sector changes and it walks through the
+ * newly opened gate into the next area.
+ */
+function WanderingAgent({ agent }: { agent: Agent }) {
+  const group = useRef<THREE.Group>(null)
+  const pos = useRef(new THREE.Vector3())
+  const target = useRef(new THREE.Vector3())
+  const ready = useRef(false)
+
+  if (!ready.current) {
+    const b = sectorBounds(agent.clearance)
+    pos.current.set(THREE.MathUtils.lerp(b.xMin, b.xMax, hash01(agent.id)), 0, sectorCenterZ(agent.clearance))
+    target.current.copy(pos.current)
+    ready.current = true
+  }
+
+  useFrame((state, delta) => {
+    const g = group.current
+    if (!g) return
+    const b = sectorBounds(agent.clearance)
+
+    // reached the target (or sector moved under us) → pick a fresh wander point
+    if (pos.current.distanceTo(target.current) < 0.4) {
+      target.current.set(
+        THREE.MathUtils.lerp(b.xMin, b.xMax, Math.random()),
+        0,
+        THREE.MathUtils.lerp(b.zMin, b.zMax, Math.random()),
+      )
+    }
+    // if clearance just rose, drag the target into the new sector so it walks over
+    target.current.z = THREE.MathUtils.clamp(target.current.z, b.zMin, b.zMax)
+
+    const dir = target.current.clone().sub(pos.current)
+    const dist = dir.length()
+    const moving = dist > 0.05
+    if (moving) {
+      dir.normalize()
+      pos.current.addScaledVector(dir, Math.min(1.8 * delta, dist))
+      g.rotation.y = Math.atan2(dir.x, dir.z)
+    }
+    const bob = moving
+      ? Math.abs(Math.sin(state.clock.elapsedTime * 8)) * 0.12
+      : Math.sin(state.clock.elapsedTime * 2) * 0.05
+    g.position.set(pos.current.x, bob, pos.current.z)
+  })
+
+  return (
+    <group ref={group}>
+      <AgentBody agent={agent} />
       <AgentLabels agent={agent} />
+      <ThoughtBubble agentId={agent.id} />
     </group>
   )
 }
@@ -126,8 +221,11 @@ function PlayerAgent({ agent }: { agent: Agent }) {
     if (dx !== 0 || dz !== 0) {
       const len = Math.hypot(dx, dz)
       const speed = 6 * delta
+      // Locked gates block you: you can't move past the gate to a sector you
+      // haven't cleared yet. Earn clearance (by learning) and it opens.
+      const minZ = agent.clearance >= SECTOR_COUNT - 1 ? -9 : gateZ(agent.clearance + 1)
       pos.current[0] = THREE.MathUtils.clamp(pos.current[0] + (dx / len) * speed, -9, 9)
-      pos.current[2] = THREE.MathUtils.clamp(pos.current[2] + (dz / len) * speed, -9, 9)
+      pos.current[2] = THREE.MathUtils.clamp(pos.current[2] + (dz / len) * speed, minZ, 9)
       if (group.current) group.current.rotation.y = Math.atan2(dx, dz)
     }
     // bob slightly while moving
@@ -144,7 +242,66 @@ function PlayerAgent({ agent }: { agent: Agent }) {
         <ringGeometry args={[0.7, 0.85, 32]} />
         <meshStandardMaterial color="#e879f9" emissive="#e879f9" emissiveIntensity={1} side={THREE.DoubleSide} />
       </mesh>
+      <ThoughtBubble agentId={agent.id} />
     </group>
+  )
+}
+
+/** Gated sectors + locked/open gates that visualize the clearance ladder. */
+function ClearanceField({ maxClearance }: { maxClearance: number }) {
+  return (
+    <>
+      {Array.from({ length: SECTOR_COUNT }).map((_, s) => {
+        const unlocked = maxClearance >= s
+        const cz = sectorCenterZ(s)
+        return (
+          <group key={`sector-${s}`}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.71, cz]}>
+              <planeGeometry args={[18, SECTOR_SPAN - 0.1]} />
+              <meshStandardMaterial color={unlocked ? '#10b981' : '#334155'} transparent opacity={unlocked ? 0.13 : 0.06} />
+            </mesh>
+            <Text
+              position={[0, -1.69, cz]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              fontSize={0.5}
+              color={unlocked ? '#6ee7b7' : '#64748b'}
+              anchorX="center"
+              anchorY="middle"
+            >
+              {s === 0 ? 'START' : clearanceLabel(s)}
+            </Text>
+          </group>
+        )
+      })}
+      {Array.from({ length: SECTOR_COUNT - 1 }).map((_, i) => {
+        const k = i + 1
+        const open = maxClearance >= k
+        const color = open ? '#22c55e' : '#ef4444'
+        return (
+          <group key={`gate-${k}`} position={[0, 0, gateZ(k)]}>
+            {[-8.5, 8.5].map((x) => (
+              <mesh key={x} position={[x, -0.4, 0]}>
+                <boxGeometry args={[0.3, 3, 0.3]} />
+                <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.6} />
+              </mesh>
+            ))}
+            <mesh position={[0, 0.6, 0]}>
+              <boxGeometry args={[17, 0.2, 0.2]} />
+              <meshStandardMaterial color={color} emissive={color} emissiveIntensity={open ? 0.3 : 1} transparent opacity={open ? 0.3 : 0.9} />
+            </mesh>
+            {!open && (
+              <mesh position={[0, -0.4, 0]}>
+                <planeGeometry args={[17, 2.6]} />
+                <meshStandardMaterial color={color} transparent opacity={0.18} side={THREE.DoubleSide} />
+              </mesh>
+            )}
+            <Text position={[0, 1.4, 0]} fontSize={0.45} color={color} anchorX="center" anchorY="middle">
+              {open ? `✓ ${clearanceLabel(k)} OPEN` : `🔒 ${clearanceLabel(k)} REQUIRED`}
+            </Text>
+          </group>
+        )
+      })}
+    </>
   )
 }
 
@@ -152,9 +309,11 @@ function GameArena() {
   const { agents, controlledAgentId } = useAgentStore()
   const idle = agents.filter((a) => a.id !== controlledAgentId)
   const player = agents.find((a) => a.id === controlledAgentId)
+  const maxClearance = agents.reduce((m, a) => Math.max(m, a.clearance), 0)
 
   return (
     <>
+      <ClearanceField maxClearance={maxClearance} />
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} intensity={1} />
       <pointLight position={[-10, 5, -10]} intensity={0.5} color="#3b82f6" />
@@ -180,16 +339,8 @@ function GameArena() {
           <meshStandardMaterial color="#60a5fa" emissive="#60a5fa" emissiveIntensity={0.8} />
         </Sphere>
       ))}
-      {idle.map((agent, i) => (
-        <IdleAgent
-          key={agent.id}
-          agent={agent}
-          position={[
-            Math.cos((i / Math.max(idle.length, 1)) * Math.PI * 2) * 4,
-            0,
-            Math.sin((i / Math.max(idle.length, 1)) * Math.PI * 2) * 4,
-          ]}
-        />
+      {idle.map((agent) => (
+        <WanderingAgent key={agent.id} agent={agent} />
       ))}
       {player && <PlayerAgent key={player.id} agent={player} />}
       <OrbitControls makeDefault />
@@ -320,30 +471,54 @@ export default function Game() {
 
         <div className="absolute top-4 right-4 bg-black/70 p-4 rounded-lg backdrop-blur max-w-xs">
           <h3 className="font-bold mb-2">Party — click to drive</h3>
-          {agents.map((agent) => (
-            <button
-              key={agent.id}
-              onClick={() => setControlledAgentId(agent.id)}
-              className={`w-full text-left text-xs mb-2 p-1.5 rounded transition ${
-                agent.id === controlledAgentId ? 'bg-fuchsia-600/30 ring-1 ring-fuchsia-400/50' : 'hover:bg-white/5'
-              }`}
-            >
-              <div className="flex justify-between">
-                <span className="font-semibold">
-                  {agent.id === controlledAgentId && '🎮 '}
-                  {agent.name}
-                </span>
-                <span className="text-gray-400">Lv.{agent.level}</span>
-              </div>
-              <div className="text-gray-500">{agent.skills.join(', ')}</div>
-            </button>
-          ))}
+          {agents.map((agent) => {
+            const prog = clearanceProgress(agent.knowledge)
+            const cleared = agent.clearance > 0
+            return (
+              <button
+                key={agent.id}
+                onClick={() => setControlledAgentId(agent.id)}
+                className={`w-full text-left text-xs mb-2 p-1.5 rounded transition ${
+                  agent.id === controlledAgentId ? 'bg-fuchsia-600/30 ring-1 ring-fuchsia-400/50' : 'hover:bg-white/5'
+                }`}
+              >
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold">
+                    {agent.id === controlledAgentId && '🎮 '}
+                    {agent.name}
+                  </span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded ${
+                      cleared ? 'bg-emerald-600/30 text-emerald-300' : 'bg-gray-600/40 text-gray-400'
+                    }`}
+                  >
+                    {cleared ? `🔑 ${clearanceLabel(agent.clearance)}` : 'UNCLEARED'}
+                  </span>
+                </div>
+                {/* knowledge → next clearance */}
+                <div className="mt-1 h-1 bg-gray-600 rounded overflow-hidden">
+                  <div className="h-full bg-cyan-400" style={{ width: `${prog.ratio * 100}%` }} />
+                </div>
+                <div className="text-[10px] text-gray-500 mt-0.5">
+                  {prog.next === null
+                    ? 'Top clearance reached'
+                    : `${agent.knowledge} knowledge · ${prog.toNext} to ${clearanceLabel(prog.next)}`}
+                </div>
+              </button>
+            )
+          })}
         </div>
       </div>
 
       <div className="w-96 bg-gray-800 p-4 flex flex-col gap-4 overflow-y-auto">
         {/* The headline feature: chat with Claude from inside the game */}
         <ClaudeChat />
+
+        {/* Emergent narrative — agents meet, negotiate, and adapt */}
+        <StoryFeed />
+
+        {/* Player Crafted Items — forge gear that buffs colonists */}
+        <CraftPanel />
 
         {/* AI brain status — auto-connects from the env key, so most players
             never need to touch this. The key box only appears if that fails. */}
@@ -383,6 +558,9 @@ export default function Game() {
             {connectError && <p className="mt-2 text-xs text-red-400">{connectError}</p>}
           </div>
         )}
+
+        {/* Real-time mode: every agent thinks & acts autonomously, concurrently */}
+        <LiveControls />
 
         <MeshyPanel />
 

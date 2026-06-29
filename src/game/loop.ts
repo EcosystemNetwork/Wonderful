@@ -1,16 +1,18 @@
 import { useMemo, useState } from 'react'
-import { useAgentStore } from '../game/store'
+import { useAgentStore, THINKING } from '../game/store'
 import { SelfImprovingAgent } from '../game/agent'
 import { NebiusClient } from '../api/nebius'
 import { saveMemory, saveRun } from '../api/insforge'
 import { Challenge } from '../game/types'
+import { knowledgeGain, applyLearning, clearanceLabel } from '../game/progression'
 
 /**
  * GameLoop - Core game orchestration
  * Manages turns, challenges, agent decisions, and self-improvement
  */
 export function useGameLoop() {
-  const { agents, gameState, setGameState, updateAgent, addMemory, nebiusApiKey } = useAgentStore()
+  const { setGameState, updateAgent, addMemory, nebiusApiKey, setThought } =
+    useAgentStore()
   const [isRunning, setIsRunning] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
 
@@ -19,10 +21,11 @@ export function useGameLoop() {
   const nebius = useMemo(() => new NebiusClient(nebiusApiKey), [nebiusApiKey])
 
   const addLog = (msg: string) => {
-    setLogs(prev => [...prev.slice(-50), `[T${gameState.turn}] ${msg}`])
+    const t = useAgentStore.getState().gameState.turn
+    setLogs(prev => [...prev.slice(-50), `[T${t}] ${msg}`])
   }
 
-  const generateChallenge = (): Challenge => {
+  const generateChallenge = (turn: number): Challenge => {
     const types: Challenge['type'][] = ['combat', 'puzzle', 'social', 'exploration']
     const type = types[Math.floor(Math.random() * types.length)]
     
@@ -53,15 +56,20 @@ export function useGameLoop() {
       id: `challenge-${Date.now()}`,
       type,
       description: descriptions[type][Math.floor(Math.random() * descriptions[type].length)],
-      difficulty: Math.min(gameState.turn + 3, 10),
+      difficulty: Math.min(turn + 3, 10),
       rewards: [
-        { type: 'xp', value: 50 + gameState.turn * 10 },
+        { type: 'xp', value: 50 + turn * 10 },
         { type: 'skill', value: 'unknown' },
       ],
     }
   }
 
   const runTurn = async () => {
+    // Read a fresh store snapshot every turn. Destructuring `agents`/`gameState`
+    // at hook-render time froze them in this closure, so autoRun's loop kept
+    // seeing turn 0 — the end condition never tripped and saveRun never ran.
+    const { agents, gameState } = useAgentStore.getState()
+
     if (agents.length === 0) {
       addLog('No agents in party!')
       return
@@ -70,15 +78,18 @@ export function useGameLoop() {
     setIsRunning(true)
     addLog('--- New Turn ---')
 
-    const challenge = generateChallenge()
+    const challenge = generateChallenge(gameState.turn)
     addLog(`Challenge: ${challenge.description} (${challenge.type}, diff: ${challenge.difficulty})`)
 
     // Each agent decides their action
     for (const agent of agents) {
       try {
+        setThought(agent.id, THINKING)
         const aiAgent = new SelfImprovingAgent(agent, nebius.getClient())
         const action = await aiAgent.decideAction(challenge, `Party of ${agents.length} agents`)
-        
+
+        // Surface the live reasoning as a floating thought bubble in the arena.
+        setThought(agent.id, action.reasoning)
         addLog(`${agent.name}: ${action.action} (confidence: ${(action.confidence * 100).toFixed(0)}%)`)
         
         // Update agent with new memory
@@ -102,6 +113,19 @@ export function useGameLoop() {
           addLog(`  ↳ memory saved to InsForge (${result.key.slice(0, 8)})`)
         }
 
+        // Learn from the attempt: earn Knowledge, which can grant a clearance tier.
+        const gained = knowledgeGain(action.confidence, challenge.difficulty)
+        const learned = applyLearning(agent, gained)
+        updateAgent(agent.id, {
+          knowledge: learned.knowledge,
+          clearance: learned.clearance,
+          xp: agent.xp + gained,
+        })
+        addLog(`  ↳ ${agent.name} learned +${gained} knowledge (${learned.knowledge} total)`)
+        if (learned.promoted) {
+          addLog(`🔓 ${agent.name} earned ${clearanceLabel(learned.clearance)} clearance — a gate opens!`)
+        }
+
         // Check for level up
         if (agent.xp > agent.level * 100) {
           updateAgent(agent.id, {
@@ -118,6 +142,7 @@ export function useGameLoop() {
         }
 
       } catch (e) {
+        setThought(agent.id, '⚠ couldn’t act')
         addLog(`${agent.name} failed to act: ${e}`)
       }
     }
@@ -148,9 +173,10 @@ export function useGameLoop() {
       }
     }
 
-    setGameState({ turn: gameState.turn + 1 })
-    
-    if (gameState.turn >= gameState.maxTurns) {
+    const nextTurn = gameState.turn + 1
+    setGameState({ turn: nextTurn })
+
+    if (nextTurn >= gameState.maxTurns) {
       setGameState({ phase: 'ended' })
       addLog('Game Over!')
 
@@ -162,7 +188,7 @@ export function useGameLoop() {
           agent_role: agent.role,
           level: agent.level,
           xp: agent.xp,
-          turns: gameState.turn,
+          turns: nextTurn,
           final_strategy: agent.strategy,
           score,
         })
@@ -175,7 +201,8 @@ export function useGameLoop() {
 
   const autoRun = async (turns: number = 10) => {
     for (let i = 0; i < turns; i++) {
-      if (gameState.phase === 'ended') break
+      // Fresh read — the closure's gameState never updates between iterations.
+      if (useAgentStore.getState().gameState.phase === 'ended') break
       await runTurn()
       await new Promise(r => setTimeout(r, 2000))
     }

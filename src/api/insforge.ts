@@ -1,5 +1,6 @@
 import { createClient } from '@insforge/sdk'
-import type { Memory } from '../game/types'
+import type { Agent, Memory } from '../game/types'
+import type { ChatMessage } from './claude'
 import { toFetchableModelUrl } from './meshy'
 
 /**
@@ -27,6 +28,8 @@ export const insforge = isInsforgeConfigured
 const CHARACTERS_BUCKET = 'characters'
 const LOCAL_MEM_KEY = 'wonderful-memories'
 const LOCAL_RUN_KEY = 'wonderful-runs'
+const LOCAL_AGENT_KEY = 'wonderful-agents'
+const LOCAL_CHAT_KEY = 'wonderful-chat'
 
 export type Backend = 'insforge' | 'local'
 
@@ -180,6 +183,169 @@ export async function topRuns(limit = 10): Promise<AgentRun[]> {
   return readLocal<AgentRun>(LOCAL_RUN_KEY)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
+}
+
+// ---------------------------------------------------------------------------
+// Summoned agents (the player's party, persisted across sessions)
+// ---------------------------------------------------------------------------
+
+export interface StoredAgent {
+  id?: string
+  user_id?: string | null
+  agent_id: string
+  name: string
+  role: string
+  level: number
+  xp: number
+  strategy?: string | null
+  model_url?: string | null
+  /** Full Agent object, so a restored party is lossless (stats/skills/memories). */
+  snapshot?: Agent | null
+  created_at?: string
+}
+
+/** Reconstruct a full Agent from a stored row, preferring the JSONB snapshot. */
+function rowToAgent(row: StoredAgent): Agent {
+  const base = (row.snapshot ?? {}) as Partial<Agent>
+  return {
+    id: base.id ?? row.agent_id,
+    name: base.name ?? row.name,
+    role: (base.role ?? row.role) as Agent['role'],
+    level: base.level ?? row.level ?? 1,
+    xp: base.xp ?? row.xp ?? 0,
+    stats: base.stats ?? { strength: 4, intelligence: 4, agility: 4, wisdom: 4 },
+    skills: base.skills ?? ['basic_attack'],
+    memories: base.memories ?? [],
+    personality: base.personality ?? 'curious, strategic',
+    strategy: base.strategy ?? row.strategy ?? 'Explore and learn from surroundings',
+    improvementLog: base.improvementLog ?? [],
+    modelUrl: row.model_url ?? base.modelUrl,
+    clearance: base.clearance ?? 0,
+    knowledge: base.knowledge ?? 0,
+  }
+}
+
+/**
+ * Persist (or update) a summoned agent. Upserts on `agent_id` so re-saving the
+ * same character — e.g. once its Meshy model attaches — updates the one row
+ * instead of piling up duplicates. Stores the full agent as a JSONB snapshot.
+ */
+export async function saveAgent(
+  agent: Agent,
+  modelUrl?: string,
+): Promise<{ backend: Backend }> {
+  const row: StoredAgent = {
+    agent_id: agent.id,
+    name: agent.name,
+    role: agent.role,
+    level: agent.level,
+    xp: agent.xp,
+    strategy: agent.strategy,
+    model_url: modelUrl ?? agent.modelUrl ?? null,
+    snapshot: { ...agent, modelUrl: modelUrl ?? agent.modelUrl },
+  }
+
+  if (insforge) {
+    try {
+      const { error } = await insforge.database
+        .from('summoned_agents')
+        .upsert([row], { onConflict: 'agent_id' })
+        .select()
+      if (!error) return { backend: 'insforge' }
+      console.warn('InsForge saveAgent failed, using local fallback:', error.message)
+    } catch (e) {
+      console.warn('InsForge saveAgent threw, using local fallback:', e instanceof Error ? e.message : e)
+    }
+  }
+  const all = readLocal<StoredAgent>(LOCAL_AGENT_KEY).filter((a) => a.agent_id !== row.agent_id)
+  all.push(row)
+  writeLocal(LOCAL_AGENT_KEY, all)
+  return { backend: 'local' }
+}
+
+/**
+ * Load the persisted party as ready-to-use Agent objects (newest first),
+ * deduped by agent_id. Used to restore the party on app load.
+ */
+export async function loadParty(limit = 50): Promise<Agent[]> {
+  let rows: StoredAgent[] = []
+  if (insforge) {
+    try {
+      const { data, error } = await insforge.database
+        .from('summoned_agents')
+        .select()
+        .order('created_at', { ascending: false })
+        .limit(limit)
+      if (!error && data) rows = data as StoredAgent[]
+    } catch (e) {
+      console.warn('InsForge loadParty threw, using local fallback:', e instanceof Error ? e.message : e)
+    }
+  }
+  if (rows.length === 0) {
+    rows = readLocal<StoredAgent>(LOCAL_AGENT_KEY).slice().reverse()
+  }
+  const seen = new Set<string>()
+  const party: Agent[] = []
+  for (const row of rows) {
+    if (seen.has(row.agent_id)) continue
+    seen.add(row.agent_id)
+    party.push(rowToAgent(row))
+  }
+  return party
+}
+
+// ---------------------------------------------------------------------------
+// Chat transcript (in-game Claude chat, persisted across sessions)
+// ---------------------------------------------------------------------------
+
+interface StoredChat {
+  id?: string
+  user_id?: string | null
+  role: string
+  content: string
+  created_at?: string
+}
+
+export async function saveChatMessage(message: ChatMessage): Promise<{ backend: Backend }> {
+  const row: StoredChat = { role: message.role, content: message.content }
+
+  if (insforge) {
+    try {
+      const { error } = await insforge.database.from('chat_messages').insert([row]).select()
+      if (!error) return { backend: 'insforge' }
+      console.warn('InsForge saveChatMessage failed, using local fallback:', error.message)
+    } catch (e) {
+      console.warn('InsForge saveChatMessage threw, using local fallback:', e instanceof Error ? e.message : e)
+    }
+  }
+  const all = readLocal<StoredChat>(LOCAL_CHAT_KEY)
+  all.push(row)
+  writeLocal(LOCAL_CHAT_KEY, all)
+  return { backend: 'local' }
+}
+
+export async function listChat(limit = 100): Promise<ChatMessage[]> {
+  if (insforge) {
+    try {
+      const { data, error } = await insforge.database
+        .from('chat_messages')
+        .select()
+        .order('created_at', { ascending: true })
+        .limit(limit)
+      if (!error && data) {
+        return (data as StoredChat[]).map((m) => ({
+          role: m.role === 'assistant' ? 'assistant' : 'user',
+          content: m.content,
+        }))
+      }
+    } catch (e) {
+      console.warn('InsForge listChat threw, using local fallback:', e instanceof Error ? e.message : e)
+    }
+  }
+  return readLocal<StoredChat>(LOCAL_CHAT_KEY).map((m) => ({
+    role: m.role === 'assistant' ? 'assistant' : 'user',
+    content: m.content,
+  }))
 }
 
 // ---------------------------------------------------------------------------

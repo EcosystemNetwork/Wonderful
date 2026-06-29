@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { generateModel, isMeshyConfigured } from '../api/meshy'
-import { storeCharacterModel } from '../api/insforge'
+import { storeCharacterModel, saveAgent } from '../api/insforge'
 import { useAgentStore } from '../game/store'
 
 /**
@@ -46,6 +46,9 @@ export default function MeshyPanel() {
       setStageLabel('Adding it to the arena…')
       const stored = await storeCharacterModel(prompt.trim().slice(0, 24) || effectiveTarget, meshyUrl)
       updateAgent(effectiveTarget, { modelUrl: stored.url })
+      // Persist the model→agent link so the same 3D character returns next session.
+      const updated = useAgentStore.getState().agents.find((a) => a.id === effectiveTarget)
+      if (updated) void saveAgent(updated, stored.url)
       setDone(true)
       setStageLabel('')
     } catch (err) {

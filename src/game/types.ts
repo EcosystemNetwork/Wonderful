@@ -17,6 +17,10 @@ export interface Agent {
   improvementLog: ImprovementEntry[]
   /** URL to a Meshy-generated .glb model (InsForge-stored when available). */
   modelUrl?: string
+  /** Security clearance tier. Starts at 0 ("UNCLEARED"); rises as the agent learns. */
+  clearance: number
+  /** Knowledge points earned by solving challenges; crossing a threshold grants clearance. */
+  knowledge: number
 }
 
 export interface ImprovementEntry {
@@ -71,4 +75,20 @@ export interface GameEvent {
   type: 'agent_action' | 'challenge_complete' | 'level_up' | 'memory_stored'
   payload: unknown
   timestamp: number
+}
+
+/**
+ * A single thing that happened in the live (real-time) world — one agent's
+ * action at a moment in time. Agents perceive recent events from *other* agents
+ * as context, so they react to each other asynchronously.
+ */
+export interface WorldEvent {
+  id: string
+  agentId: string
+  agentName: string
+  role: Agent['role']
+  action: string
+  reasoning: string
+  confidence: number
+  ts: number
 }

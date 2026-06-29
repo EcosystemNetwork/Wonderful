@@ -1,99 +1,170 @@
 import { useState } from 'react'
 import { generateModel, isMeshyConfigured } from '../api/meshy'
-import { storeCharacterModel, isInsforgeConfigured } from '../api/insforge'
+import { storeCharacterModel } from '../api/insforge'
 import { useAgentStore } from '../game/store'
 
 /**
- * MeshyPanel — generate a 3D character model via Meshy.ai and attach it to one
- * of the party's agents so it renders in the arena. Generated .glb models are
- * persisted to InsForge Storage so they outlive the temporary Meshy download
- * URL; if InsForge isn't configured we fall back to the ephemeral Meshy URL.
+ * MeshyPanel — turn a sentence into a real 3D character and drop it onto one of
+ * the player's party members. Written for non-technical players: plain language,
+ * example prompts, a live preview, and visible (not console-only) errors.
  */
+const EXAMPLES = ['a cute round slime', 'a cyberpunk knight', 'a fluffy fox warrior', 'a stone golem']
+
 export default function MeshyPanel() {
-  const { agents, updateAgent } = useAgentStore()
+  const { agents, updateAgent, controlledAgentId } = useAgentStore()
   const [prompt, setPrompt] = useState('')
   const [targetId, setTargetId] = useState('')
-  const [generating, setGenerating] = useState(false)
-  const [status, setStatus] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [stageLabel, setStageLabel] = useState('')
+  const [preview, setPreview] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
 
-  const generate = async () => {
-    if (!prompt) return
-    const agentId = targetId || agents[0]?.id
-    if (!agentId) {
-      setStatus('Summon an agent first')
-      return
-    }
+  // Default to the character the player is driving.
+  const effectiveTarget = targetId || controlledAgentId || agents[0]?.id || ''
+  const targetAgent = agents.find((a) => a.id === effectiveTarget)
 
-    setGenerating(true)
-    setStatus('Starting generation...')
+  const create = async () => {
+    if (!prompt.trim() || !effectiveTarget) return
+    setBusy(true)
+    setError(null)
+    setDone(false)
+    setPreview(null)
+    setProgress(0)
+    setStageLabel('Getting started…')
 
     try {
-      const meshyUrl = await generateModel(prompt, {
-        onProgress: (p, _s, stage) =>
-          setStatus(`${stage === 'refine' ? 'Texturing' : 'Sculpting'}... ${p}%`),
+      const meshyUrl = await generateModel(prompt.trim(), {
+        onProgress: (p, _s, stage) => {
+          setProgress(p)
+          setStageLabel(stage === 'refine' ? 'Painting on the colors…' : 'Sculpting the shape…')
+        },
+        onPreview: (thumb) => setPreview(thumb),
       })
 
-      setStatus('Saving model to InsForge Storage...')
-      const stored = await storeCharacterModel(prompt.slice(0, 24) || agentId, meshyUrl)
-
-      updateAgent(agentId, { modelUrl: stored.url })
-      setStatus(
-        stored.backend === 'insforge'
-          ? `✓ Stored in InsForge & attached: ${stored.key}`
-          : '✓ Attached using Meshy URL (re-host skipped — InsForge off or CDN blocked it)',
-      )
+      setStageLabel('Adding it to the arena…')
+      const stored = await storeCharacterModel(prompt.trim().slice(0, 24) || effectiveTarget, meshyUrl)
+      updateAgent(effectiveTarget, { modelUrl: stored.url })
+      setDone(true)
+      setStageLabel('')
     } catch (err) {
+      setError(
+        err instanceof Error && /timed out/i.test(err.message)
+          ? "That took too long and timed out. Try a simpler description."
+          : "Couldn't make that one. Try again or tweak the description.",
+      )
       console.error('Meshy generation failed:', err)
-      setStatus(`✗ ${err instanceof Error ? err.message : 'Generation failed'}`)
     } finally {
-      setGenerating(false)
+      setBusy(false)
     }
   }
 
   return (
     <div className="bg-gray-700 p-3 rounded">
-      <h2 className="font-bold mb-2">Meshy.ai 3D Characters</h2>
+      <h2 className="font-bold mb-0.5">🎨 Make a 3D character</h2>
+      <p className="text-[11px] text-gray-400 mb-2">
+        Describe a look and we'll build it{targetAgent ? <> for <span className="text-gray-200">{targetAgent.name}</span></> : null}.
+      </p>
 
-      {!isMeshyConfigured && (
-        <p className="text-xs text-amber-400 mb-2">
-          Set VITE_MESHY_API_KEY to enable generation.
+      {!isMeshyConfigured ? (
+        <p className="text-xs text-amber-400">
+          Add a Meshy key (VITE_MESHY_API_KEY) to turn this on.
         </p>
+      ) : agents.length === 0 ? (
+        <p className="text-xs text-amber-300">Summon a character first, then come back here.</p>
+      ) : (
+        <>
+          <input
+            type="text"
+            placeholder="e.g. a cyberpunk knight"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && !busy && create()}
+            disabled={busy}
+            className="w-full p-2 bg-gray-600 rounded text-sm mb-2 disabled:opacity-60"
+          />
+
+          {/* one-tap example prompts so nobody faces a blank box */}
+          <div className="flex flex-wrap gap-1 mb-2">
+            {EXAMPLES.map((ex) => (
+              <button
+                key={ex}
+                onClick={() => setPrompt(ex)}
+                disabled={busy}
+                className="text-[10px] px-2 py-0.5 rounded-full bg-gray-600 hover:bg-gray-500 text-gray-200 disabled:opacity-50"
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+
+          {/* pick who gets it — only when there's a choice to make */}
+          {agents.length > 1 && (
+            <select
+              value={effectiveTarget}
+              onChange={(e) => setTargetId(e.target.value)}
+              disabled={busy}
+              className="w-full p-2 bg-gray-600 rounded text-sm mb-2 disabled:opacity-60"
+            >
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  Give it to {a.name}{a.modelUrl ? ' (replace current)' : ''}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <button
+            onClick={create}
+            disabled={busy || !prompt.trim()}
+            className="w-full p-2 bg-cyan-600 hover:bg-cyan-500 rounded font-bold disabled:opacity-50"
+          >
+            {busy ? 'Making it…' : '✨ Create it'}
+          </button>
+
+          {/* progress + live preview while it builds (~2–3 min) */}
+          {busy && (
+            <div className="mt-3">
+              <div className="flex justify-between text-[11px] text-gray-300 mb-1">
+                <span>{stageLabel}</span>
+                <span>{progress}%</span>
+              </div>
+              <div className="h-1.5 bg-gray-600 rounded overflow-hidden">
+                <div
+                  className="h-full bg-cyan-400 transition-all duration-500"
+                  style={{ width: `${Math.max(5, progress)}%` }}
+                />
+              </div>
+              {preview ? (
+                <img src={preview} alt="preview" className="mt-2 w-full rounded border border-white/10" />
+              ) : (
+                <p className="mt-2 text-[10px] text-gray-500">
+                  This takes a couple of minutes — a preview will pop up here.
+                </p>
+              )}
+            </div>
+          )}
+
+          {done && (
+            <div className="mt-3 text-sm text-emerald-300">
+              <p className="font-semibold">✓ Done — look at the arena!</p>
+              <p className="text-[11px] text-emerald-400/80">
+                {targetAgent?.name} now wears your new look.
+              </p>
+              {preview && (
+                <img src={preview} alt="your character" className="mt-2 w-full rounded border border-emerald-400/20" />
+              )}
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-3 text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded p-2">
+              {error}
+            </div>
+          )}
+        </>
       )}
-
-      <input
-        type="text"
-        placeholder="Describe character (e.g., 'cyberpunk warrior')"
-        value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
-        className="w-full p-2 bg-gray-600 rounded text-sm mb-2"
-      />
-
-      <select
-        value={targetId}
-        onChange={(e) => setTargetId(e.target.value)}
-        className="w-full p-2 bg-gray-600 rounded text-sm mb-2"
-        disabled={agents.length === 0}
-      >
-        {agents.length === 0 && <option value="">No agents — summon one first</option>}
-        {agents.map((a) => (
-          <option key={a.id} value={a.id}>
-            {a.name} ({a.role}){a.modelUrl ? ' • has model' : ''}
-          </option>
-        ))}
-      </select>
-
-      <button
-        onClick={generate}
-        disabled={generating || !prompt || !isMeshyConfigured || agents.length === 0}
-        className="w-full p-2 bg-cyan-600 hover:bg-cyan-500 rounded font-bold disabled:opacity-50"
-      >
-        {generating ? 'Generating...' : 'Generate & Attach'}
-      </button>
-
-      {status && <div className="mt-2 text-xs text-cyan-300 break-words">{status}</div>}
-      <div className="mt-1 text-xs text-gray-400">
-        {isInsforgeConfigured ? 'InsForge Storage on' : 'local mode'}
-      </div>
     </div>
   )
 }

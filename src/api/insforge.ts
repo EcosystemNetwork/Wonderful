@@ -1,5 +1,6 @@
 import { createClient } from '@insforge/sdk'
 import type { Memory } from '../game/types'
+import { toFetchableModelUrl } from './meshy'
 
 /**
  * InsForge backend integration for Wonderful.
@@ -193,29 +194,33 @@ export async function storeCharacterModel(
   role: string,
   modelUrl: string,
 ): Promise<{ url: string; key: string; backend: Backend }> {
+  // Meshy's CDN lacks CORS headers, so a direct browser fetch of the raw URL
+  // throws "Failed to fetch" and useGLTF can't render it either. Route through
+  // the dev proxy so both the re-hosting fetch and any fallback render work.
+  const fetchable = toFetchableModelUrl(modelUrl)
+
   if (!insforge) {
-    // No backend — just hand back the ephemeral Meshy URL.
-    return { url: modelUrl, key: modelUrl, backend: 'local' }
+    // No backend — hand back the (proxied) Meshy URL so it still renders.
+    return { url: fetchable, key: modelUrl, backend: 'local' }
   }
 
-  // Re-hosting is best-effort. Meshy serves models from a signed CDN URL that
-  // usually lacks CORS headers, so a browser fetch() of it can throw "Failed to
-  // fetch". That must NOT discard a successful generation — fall back to the
-  // ephemeral Meshy URL so the character still attaches.
+  // Re-hosting is best-effort: a failed fetch/upload must NOT discard a
+  // successful generation — fall back to the proxied Meshy URL so the character
+  // still attaches and renders.
   let file: File
   let size: number
   try {
-    const res = await fetch(modelUrl)
+    const res = await fetch(fetchable)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const blob = await res.blob()
     size = blob.size
     file = new File([blob], `${role}.glb`, { type: 'model/gltf-binary' })
   } catch (e) {
     console.warn(
-      'Could not fetch Meshy asset for re-hosting (likely CORS on the CDN); using ephemeral Meshy URL:',
+      'Could not fetch Meshy asset for re-hosting; using proxied Meshy URL:',
       e instanceof Error ? e.message : e,
     )
-    return { url: modelUrl, key: modelUrl, backend: 'local' }
+    return { url: fetchable, key: modelUrl, backend: 'local' }
   }
 
   try {
@@ -225,12 +230,12 @@ export async function storeCharacterModel(
 
     if (error || !data) {
       console.warn('InsForge storage upload failed:', error?.message)
-      return { url: modelUrl, key: modelUrl, backend: 'local' }
+      return { url: fetchable, key: modelUrl, backend: 'local' }
     }
     return { url: data.url, key: data.key, backend: 'insforge' }
   } catch (e) {
-    console.warn('InsForge storage upload threw, using ephemeral Meshy URL:', e instanceof Error ? e.message : e)
-    return { url: modelUrl, key: modelUrl, backend: 'local' }
+    console.warn('InsForge storage upload threw, using proxied Meshy URL:', e instanceof Error ? e.message : e)
+    return { url: fetchable, key: modelUrl, backend: 'local' }
   }
 }
 

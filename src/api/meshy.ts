@@ -9,10 +9,24 @@
  */
 
 const MESHY_BASE = 'https://api.meshy.ai/openapi/v2/text-to-3d'
+const MESHY_ASSET_HOST = 'https://assets.meshy.ai'
 
 const API_KEY = import.meta.env.VITE_MESHY_API_KEY || ''
 
 export const isMeshyConfigured = Boolean(API_KEY)
+
+/**
+ * Make a Meshy asset URL fetchable from the browser. Meshy's CDN sends no CORS
+ * headers, so in dev we route it through the Vite proxy (same-origin). In a
+ * production build there's no Vite proxy, so the original URL is returned and a
+ * server-side proxy must provide an equivalent `/meshy-cdn` route.
+ */
+export function toFetchableModelUrl(url: string): string {
+  if (import.meta.env.DEV && url.startsWith(MESHY_ASSET_HOST)) {
+    return url.replace(MESHY_ASSET_HOST, '/meshy-cdn')
+  }
+  return url
+}
 
 export type MeshyStatus = 'PENDING' | 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED' | 'CANCELED'
 
@@ -26,6 +40,8 @@ export interface MeshyTask {
     obj?: string
     usdz?: string
   }
+  /** A rendered preview image of the model-in-progress (safe to <img> directly). */
+  thumbnail_url?: string
   task_error?: { message: string }
 }
 
@@ -113,6 +129,8 @@ export type MeshyStage = 'preview' | 'refine'
 export interface PollOptions {
   /** Called on every poll with 0-100 progress (and stage during a full generate). */
   onProgress?: (progress: number, status: MeshyStatus, stage?: MeshyStage) => void
+  /** Called with a preview thumbnail URL as soon as one is available. */
+  onPreview?: (thumbnailUrl: string) => void
   /** Milliseconds between polls. */
   intervalMs?: number
   /** Give up after this many milliseconds. */
@@ -124,12 +142,13 @@ export interface PollOptions {
  * model URL on success.
  */
 export async function pollUntilDone(id: string, opts: PollOptions = {}): Promise<string> {
-  const { onProgress, intervalMs = 5000, timeoutMs = 5 * 60 * 1000 } = opts
+  const { onProgress, onPreview, intervalMs = 5000, timeoutMs = 5 * 60 * 1000 } = opts
   const deadline = Date.now() + timeoutMs
 
   while (Date.now() < deadline) {
     const task = await getTask(id)
     onProgress?.(task.progress ?? 0, task.status)
+    if (task.thumbnail_url) onPreview?.(task.thumbnail_url)
 
     if (task.status === 'SUCCEEDED') {
       const url = task.model_urls?.glb

@@ -1,12 +1,20 @@
 import { create } from 'zustand'
 import { useAgentStore } from './store'
 import {
+  Blueprint,
+  blueprintFromItem,
+  blueprintSig,
   CraftedItem,
+  fuseItems,
+  itemFromBlueprint,
   Material,
   MATERIALS,
   MATERIAL_BY_ID,
   RARITY_RANK,
+  salvageYield,
+  scoreItemForRole,
   Slot,
+  SLOTS,
   StatKey,
   STATS,
 } from './crafting'
@@ -33,16 +41,30 @@ interface CraftStore {
   equipped: Record<string, Loadout>
   /** What we last applied to each agent, so we can diff cleanly. */
   applied: Record<string, AppliedBonus>
+  /** Discovered recipes, keyed for dedupe by signature. */
+  blueprints: Blueprint[]
   craftXp: number
 
   craftLevel: () => number
   scavenge: () => Material[]
   addItem: (item: CraftedItem) => void
   consume: (ids: string[]) => boolean
+  hasMaterials: (ids: string[]) => boolean
   equip: (agentId: string, item: CraftedItem) => void
   unequip: (agentId: string, slot: Slot) => void
   itemsFor: (agentId: string) => Partial<Record<Slot, CraftedItem>>
   setBonuses: (agentId: string) => { setName: string; pieces: number; bonus: number }[]
+
+  /** Remember a forged item as a recipe; returns true if newly discovered. */
+  discover: (item: CraftedItem) => boolean
+  /** Re-craft a known recipe (consumes its materials). */
+  craftFromBlueprint: (bp: Blueprint) => CraftedItem | null
+  /** Fuse two same-slot items into a stronger one. */
+  fuse: (idA: string, idB: string) => CraftedItem | null
+  /** Auto-equip the best-scoring bag item into each slot for a role. */
+  autoEquip: (agentId: string) => number
+  /** Break an item back into materials. */
+  salvage: (id: string) => Material[]
 }
 
 const ZERO: Record<StatKey, number> = { strength: 0, intelligence: 0, agility: 0, wisdom: 0 }
@@ -122,11 +144,36 @@ export const useCraftStore = create<CraftStore>((set, get) => {
     }))
   }
 
+  /** Remove an item id from every loadout and recompute the affected agents. */
+  const detachEverywhere = (itemId: string) => {
+    const affected: string[] = []
+    set((s) => {
+      const equipped = { ...s.equipped }
+      for (const [agentId, loadout] of Object.entries(equipped)) {
+        const next = { ...loadout }
+        let changed = false
+        for (const slot of SLOTS) {
+          if (next[slot] === itemId) {
+            delete next[slot]
+            changed = true
+          }
+        }
+        if (changed) {
+          equipped[agentId] = next
+          affected.push(agentId)
+        }
+      }
+      return { equipped }
+    })
+    affected.forEach(recompute)
+  }
+
   return {
     materials: {},
     inventory: [],
     equipped: {},
     applied: {},
+    blueprints: [],
     craftXp: 0,
 
     craftLevel: () => 1 + Math.floor(get().craftXp / 100),
@@ -185,6 +232,76 @@ export const useCraftStore = create<CraftStore>((set, get) => {
     setBonuses: (agentId) => {
       const items = Object.values(get().itemsFor(agentId)).filter(Boolean) as CraftedItem[]
       return setBonusFor(items).list
+    },
+
+    hasMaterials: (ids) => {
+      const have = get().materials
+      const need: Record<string, number> = {}
+      for (const id of ids) need[id] = (need[id] || 0) + 1
+      return Object.entries(need).every(([id, n]) => (have[id] || 0) >= n)
+    },
+
+    discover: (item) => {
+      const sig = blueprintSig(item.slot, item.madeFrom)
+      const known = get().blueprints.some(
+        (b) => blueprintSig(b.slot, b.materialSig) === sig,
+      )
+      if (known || item.madeFrom.length === 0) return false
+      set((s) => ({ blueprints: [blueprintFromItem(item), ...s.blueprints], craftXp: s.craftXp + 15 }))
+      return true
+    },
+
+    craftFromBlueprint: (bp) => {
+      if (!get().hasMaterials(bp.materialSig)) return null
+      get().consume(bp.materialSig)
+      const item = itemFromBlueprint(bp)
+      get().addItem(item)
+      return item
+    },
+
+    fuse: (idA, idB) => {
+      const st = get()
+      const a = st.inventory.find((i) => i.id === idA)
+      const b = st.inventory.find((i) => i.id === idB)
+      if (!a || !b || a.id === b.id || a.slot !== b.slot) return null
+      const fused = fuseItems(a, b)
+      detachEverywhere(a.id)
+      detachEverywhere(b.id)
+      set((s) => ({
+        inventory: [fused, ...s.inventory.filter((i) => i.id !== a.id && i.id !== b.id)],
+        craftXp: s.craftXp + 25,
+      }))
+      return fused
+    },
+
+    autoEquip: (agentId) => {
+      const agent = useAgentStore.getState().agents.find((a) => a.id === agentId)
+      if (!agent) return 0
+      const inv = get().inventory
+      let equippedCount = 0
+      for (const slot of SLOTS) {
+        const best = inv
+          .filter((i) => i.slot === slot)
+          .sort((x, y) => scoreItemForRole(y, agent.role) - scoreItemForRole(x, agent.role))[0]
+        if (best && get().equipped[agentId]?.[slot] !== best.id) {
+          get().equip(agentId, best)
+          equippedCount += 1
+        }
+      }
+      return equippedCount
+    },
+
+    salvage: (id) => {
+      const item = get().inventory.find((i) => i.id === id)
+      if (!item) return []
+      const matIds = salvageYield(item)
+      detachEverywhere(id)
+      set((s) => {
+        const materials = { ...s.materials }
+        for (const m of matIds) materials[m] = (materials[m] || 0) + 1
+        return { materials, inventory: s.inventory.filter((i) => i.id !== id) }
+      })
+      return matIds.map((m) => MATERIAL_BY_ID[m])
     },
   }
 })

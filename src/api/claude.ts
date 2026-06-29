@@ -1,93 +1,62 @@
 /**
- * Claude proxy client — talks to the Claude Code Proxy (Anthropic API format),
- * which converts requests to OpenAI-compatible and forwards them to Nebius.
+ * In-game "Talk to Claude" chat — now served by the InsForge `ai-chat` gateway.
  *
- * In the browser we go through the Vite dev-proxy (`/claude-proxy` → :8083) to
- * stay same-origin and avoid CORS. The `model` is a `claude-*` id only as a
- * routing hint — the proxy maps it to its configured BIG_MODEL on Nebius
- * (e.g. moonshotai/Kimi-K2.6). See docs/claude-code-proxy.md.
+ * Previously this talked to a localhost Claude Code Proxy on :8083 via the Vite
+ * dev proxy — which does not exist in a deployed build. It now posts to the same
+ * server-side edge function the rest of the game uses, requesting an Anthropic
+ * model (Claude Haiku) by default so the in-game assistant really is Claude.
+ * Override with VITE_CHAT_MODEL (must be on the gateway's allowlist).
  */
-export const CLAUDE_PROXY_CONFIG = {
-  /** Same-origin path; Vite forwards it to http://localhost:8083. */
-  baseUrl: import.meta.env.VITE_CLAUDE_PROXY_URL || '/claude-proxy',
-  /** Dummy token — proxy runs with IGNORE_CLIENT_API_KEY=true. */
-  authToken: 'claude-local',
-  /** Routing hint; proxy maps claude-* → its Nebius BIG_MODEL. */
-  model: 'claude-3-5-sonnet-20241022',
-} as const
+import { insforge } from './insforge'
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
 }
 
-interface AnthropicResponse {
-  content?: Array<{ type: string; text?: string }>
-  error?: { message?: string }
-  detail?: string
+/** Default chat model — an allowlisted Anthropic model on the gateway. */
+const CHAT_MODEL = (import.meta.env.VITE_CHAT_MODEL as string) || 'anthropic/claude-3-5-haiku'
+
+interface Completion {
+  choices?: Array<{ message?: { content?: string | null } }>
 }
 
-function endpoint(): string {
-  return `${CLAUDE_PROXY_CONFIG.baseUrl.replace(/\/$/, '')}/v1/messages`
-}
-
-async function postMessages(body: Record<string, unknown>): Promise<AnthropicResponse> {
-  const res = await fetch(endpoint(), {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': CLAUDE_PROXY_CONFIG.authToken,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({ model: CLAUDE_PROXY_CONFIG.model, ...body }),
-  })
-  const data = (await res.json().catch(() => ({}))) as AnthropicResponse
-  if (!res.ok) {
-    const msg = data.error?.message || data.detail || `HTTP ${res.status}`
-    throw new Error(msg)
+async function gatewayChat(
+  messages: Array<{ role: string; content: string }>,
+  maxTokens: number,
+): Promise<string> {
+  if (!insforge) {
+    throw new Error('AI chat unavailable: InsForge is not configured (set VITE_INSFORGE_URL / _ANON_KEY)')
   }
-  return data
-}
-
-function extractText(data: AnthropicResponse): string {
-  return (data.content || [])
-    .filter((b) => b.type === 'text' && b.text)
-    .map((b) => b.text)
-    .join('')
-    .trim()
+  const { data, error } = await insforge.functions.invoke('ai-chat', {
+    body: { model: CHAT_MODEL, messages, max_tokens: maxTokens },
+  })
+  if (error) throw new Error(error.message || 'AI chat gateway error')
+  return (data as Completion)?.choices?.[0]?.message?.content ?? ''
 }
 
 /**
- * Cheap round-trip to confirm the proxy + Nebius key are live. A non-throwing
- * HTTP 200 means the bridge works — note reasoning models (Kimi) can spend the
- * whole token budget "thinking" and return EMPTY text on a successful call, so
- * we must NOT require non-empty text here, only that the request didn't error.
+ * Cheap round-trip to confirm the gateway + key are live. A non-throwing call
+ * means the bridge works (we don't require non-empty text — some models can
+ * spend the whole budget "thinking" and still return successfully).
  */
 export async function testClaudeConnection(): Promise<boolean> {
   try {
-    await postMessages({
-      max_tokens: 64,
-      messages: [{ role: 'user', content: 'Reply with: OK' }],
-    })
+    await gatewayChat([{ role: 'user', content: 'Reply with: OK' }], 16)
     return true
   } catch (e) {
-    console.error('Claude proxy connection failed:', e)
+    console.error('AI chat connection failed:', e)
     return false
   }
 }
 
 /**
  * Send a conversation (plus a system prompt with live game context) and return
- * the assistant's reply text. Messages must start with `user` and alternate.
+ * the assistant's reply text. The system prompt is sent as a leading
+ * `system`-role message, which the gateway forwards to OpenRouter.
  */
-export async function chatWithClaude(
-  messages: ChatMessage[],
-  system: string,
-): Promise<string> {
-  const data = await postMessages({
-    max_tokens: 1024,
-    system,
-    messages,
-  })
-  return extractText(data) || '(no response)'
+export async function chatWithClaude(messages: ChatMessage[], system: string): Promise<string> {
+  const full = [{ role: 'system', content: system }, ...messages]
+  const text = await gatewayChat(full, 1024)
+  return text.trim() || '(no response)'
 }

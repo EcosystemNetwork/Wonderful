@@ -2,22 +2,32 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useAgentStore } from './store'
 import { THINKING } from './store'
 import { SelfImprovingAgent } from './agent'
-import { NebiusClient } from '../api/nebius'
+import { GatewayClient } from '../api/aiGateway'
 import { saveMemory } from '../api/insforge'
 import { Agent, AgentAction, Challenge } from './types'
 
 /**
  * Real-time simulation engine.
  *
- * Instead of a global turn loop, every agent runs its OWN autonomous brain loop:
- * perceive → decide (Nebius) → act → wait a role-specific beat → repeat. Loops
- * run concurrently and desynchronized, so many agents think and act at the same
- * time (or at different times), reacting to each other through a shared world
- * event feed. A lightweight "director" rotates the ambient situation to keep the
- * world alive.
+ * Every agent runs its OWN autonomous brain loop: perceive → decide → act →
+ * wait a role-specific beat → repeat. Loops run concurrently and desynchronized,
+ * so many agents think and act at the same time, reacting to each other through a
+ * shared world event feed. A lightweight "director" rotates the ambient situation.
+ *
+ * COST GOVERNANCE — inference is the dominant cost, so the loop spends it only
+ * when it buys something:
+ *   1. Change-detection — an agent only calls the LLM when the world actually
+ *      changed for it (new situation, or a NEW substantive action by someone
+ *      else). Otherwise it takes a free rule-based "routine" action.
+ *   2. Pause-when-unwatched — when the tab is hidden, no one is watching, so the
+ *      loop drops to routine-only (zero inference) until it's visible again.
+ *   3. Rate ceiling — a hard cap on LLM calls/min across the whole sim, so a
+ *      runaway reaction chain can never run up a surprise bill.
+ * All inference goes through the InsForge `ai-chat` gateway (no key in the
+ * browser); non-Meta models only, per project policy.
  */
 
-// --- Concurrency limiter (protects Nebius rate limits / cost) ----------------
+// --- Concurrency limiter (protects gateway rate limits / cost) ----------------
 function createLimiter(max: number) {
   let active = 0
   const queue: Array<() => void> = []
@@ -45,19 +55,56 @@ const limit = createLimiter(5)
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+// --- Rate ceiling: token bucket of LLM calls per minute (whole sim) -----------
+const MAX_CALLS_PER_MIN = Number(import.meta.env.VITE_AI_MAX_CALLS_PER_MIN) || 20
+
+class RateGovernor {
+  private hits: number[] = []
+  constructor(private maxPerMin: number) {}
+  /** Consume one token if the last-60s budget allows; returns false when capped. */
+  take(): boolean {
+    const now = Date.now()
+    const cutoff = now - 60_000
+    this.hits = this.hits.filter((t) => t > cutoff)
+    if (this.hits.length >= this.maxPerMin) return false
+    this.hits.push(now)
+    return true
+  }
+}
+
 // --- Per-role pacing ----------------------------------------------------------
-// Base milliseconds between an agent's actions; jittered so nobody stays in sync.
 const BASE_CADENCE: Record<Agent['role'], number> = {
-  rogue: 2600, // impulsive, fast
+  rogue: 2600,
   warrior: 3600,
-  healer: 4400, // reactive
-  mage: 5200, // contemplative
+  healer: 4400,
+  mage: 5200,
 }
 
 function cadence(agent: Agent): number {
   const base = BASE_CADENCE[agent.role] ?? 4000
   const jitter = base * 0.35
   return base - jitter + Math.random() * jitter * 2
+}
+
+// --- Free, rule-based "routine" actions (no inference) ------------------------
+// Used when nothing changed, the tab is hidden, or the rate ceiling is hit. The
+// world still feels alive; these just don't cost an LLM call and don't ripple
+// out to make OTHER agents think (their event ids are prefixed `routine-`).
+const ROUTINE: Record<Agent['role'], string[]> = {
+  warrior: ['holds the line, scanning for threats', 'paces the perimeter, blade ready', 'tests their footing on the cracked stone'],
+  mage: ['studies the ambient mana currents', 'mutters a half-formed incantation', 'traces a sigil in the air, thinking'],
+  rogue: ['melts into the shadows, watching', 'checks the exits out of old habit', 'palms a coin, eyeing the room'],
+  healer: ['tends a small wound in silence', 'centers themselves, sensing the group', 'sorts through a pouch of herbs'],
+}
+
+function routineAction(agent: Agent): AgentAction {
+  const lines = ROUTINE[agent.role] ?? ['observes the surroundings']
+  return {
+    agentId: agent.id,
+    action: lines[Math.floor(Math.random() * lines.length)],
+    reasoning: 'biding time — nothing new to react to',
+    confidence: 0.3,
+  }
 }
 
 // --- Ambient world ------------------------------------------------------------
@@ -107,21 +154,42 @@ function perceive(agentId: string): string {
   ].join('\n')
 }
 
+/**
+ * A signature of "what this agent could meaningfully react to": the current
+ * situation plus the id of the latest SUBSTANTIVE (non-routine) action by anyone
+ * else. If it hasn't changed since this agent last acted, there's nothing new to
+ * think about — so we skip inference and take a free routine action.
+ */
+function worldSignature(agentId: string): string {
+  const { situation, events } = useAgentStore.getState()
+  let lastOther = ''
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]
+    if (e.agentId !== agentId && !e.id.startsWith('routine-')) {
+      lastOther = e.id
+      break
+    }
+  }
+  return `${situation}::${lastOther}`
+}
+
 class SimEngine {
   private brains = new Map<string, () => void>() // agentId -> stop()
   private running = false
   private unsub?: () => void
   private idsKey = ''
   private directorTimer?: ReturnType<typeof setInterval>
+  private lastSig = new Map<string, string>() // agentId -> last world signature acted on
+  private gov = new RateGovernor(MAX_CALLS_PER_MIN)
 
-  constructor(private getClient: () => NebiusClient) {}
+  constructor(private getClient: () => GatewayClient) {}
 
   start() {
     if (this.running) return
     this.running = true
     useAgentStore.getState().clearEvents()
+    this.lastSig.clear()
     this.syncBrains()
-    // Re-sync whenever the agent roster changes (add/remove).
     this.unsub = useAgentStore.subscribe(() => this.syncBrains())
     this.runDirector()
   }
@@ -155,6 +223,20 @@ class SimEngine {
     }
   }
 
+  /**
+   * Decide whether this beat warrants a real LLM call. Inference is spent only
+   * when ALL hold: the world changed for this agent, the tab is visible (someone
+   * is watching), and the rate ceiling has budget. Otherwise → free routine.
+   */
+  private shouldThink(agentId: string): boolean {
+    const sig = worldSignature(agentId)
+    const changed = sig !== this.lastSig.get(agentId)
+    this.lastSig.set(agentId, sig)
+    const watched = typeof document === 'undefined' || !document.hidden
+    if (!changed || !watched) return false
+    return this.gov.take()
+  }
+
   private spawn(agentId: string): () => void {
     let alive = true
     const loop = async () => {
@@ -163,22 +245,29 @@ class SimEngine {
       while (alive && this.running) {
         const agent = useAgentStore.getState().agents.find((a) => a.id === agentId)
         if (!agent) break
-        try {
-          useAgentStore.getState().setThought(agentId, THINKING)
-          // Clone the agent so SelfImprovingAgent's internal memory push doesn't
-          // mutate store state directly.
-          const ai = new SelfImprovingAgent(
-            { ...agent, memories: [...agent.memories] },
-            this.getClient().getClient(),
-          )
-          const action = await limit(() =>
-            ai.decideAction(challengeFor(agent), perceive(agentId)),
-          )
-          if (!alive) break
-          this.applyAction(agentId, action)
-        } catch {
-          if (alive) useAgentStore.getState().setThought(agentId, '⚠ glitched')
+
+        if (this.shouldThink(agentId)) {
+          // --- Inference path (costs a gateway call) ---
+          try {
+            useAgentStore.getState().setThought(agentId, THINKING)
+            const ai = new SelfImprovingAgent(
+              { ...agent, memories: [...agent.memories] },
+              this.getClient().getClient(),
+            )
+            const action = await limit(() =>
+              ai.decideAction(challengeFor(agent), perceive(agentId)),
+            )
+            if (!alive) break
+            this.applyAction(agentId, action, false)
+          } catch {
+            // Gateway down / over budget / parse fail — keep the world moving for free.
+            if (alive) this.applyAction(agentId, routineAction(agent), true)
+          }
+        } else {
+          // --- Free path (no inference) ---
+          this.applyAction(agentId, routineAction(agent), true)
         }
+
         await sleep(cadence(agent))
       }
     }
@@ -188,14 +277,15 @@ class SimEngine {
     }
   }
 
-  private applyAction(agentId: string, action: AgentAction) {
+  private applyAction(agentId: string, action: AgentAction, isRoutine: boolean) {
     const store = useAgentStore.getState()
     const agent = store.agents.find((a) => a.id === agentId)
     if (!agent) return
 
     store.setThought(agentId, action.reasoning)
     store.pushEvent({
-      id: `ev-${Date.now()}-${agentId}`,
+      // Routine events are tagged so they DON'T make other agents spend inference.
+      id: `${isRoutine ? 'routine' : 'ev'}-${Date.now()}-${agentId}`,
       agentId,
       agentName: agent.name,
       role: agent.role,
@@ -227,8 +317,9 @@ class SimEngine {
     updates.xp = xp
     store.updateAgent(agentId, updates)
 
-    // Best-effort, non-blocking, throttled persistence (avoid hammering InsForge).
-    if (Math.random() < 0.34) {
+    // Persist only substantive memories (routine filler isn't worth a write),
+    // and even then throttle to avoid hammering the backend.
+    if (!isRoutine && Math.random() < 0.34) {
       void saveMemory({
         id: `mem-${Date.now()}-${agentId}`,
         agentId,
@@ -243,12 +334,13 @@ class SimEngine {
   private runDirector() {
     const rotate = () => {
       if (!this.running) return
+      // Don't churn the situation (which makes everyone think) while unwatched.
+      if (typeof document !== 'undefined' && document.hidden) return
       const current = useAgentStore.getState().situation
       let next = current
       while (next === current) next = SITUATIONS[Math.floor(Math.random() * SITUATIONS.length)]
       useAgentStore.getState().setSituation(next)
     }
-    // First beat shortly after going live, then every ~22s (jittered).
     setTimeout(rotate, 4000)
     this.directorTimer = setInterval(rotate, 18000 + Math.random() * 8000)
   }
@@ -256,18 +348,13 @@ class SimEngine {
 
 /**
  * React hook that owns a SimEngine instance and exposes start/stop. The engine
- * keeps running across re-renders and is torn down on unmount.
+ * keeps running across re-renders and is torn down on unmount. Inference goes
+ * through the InsForge gateway, so no API key is needed in the browser.
  */
 export function useRealtimeSim() {
   const live = useAgentStore((s) => s.simRunning)
-  const nebiusApiKey = useAgentStore((s) => s.nebiusApiKey)
   const engineRef = useRef<SimEngine | null>(null)
-  const clientRef = useRef<NebiusClient>(new NebiusClient(nebiusApiKey))
-
-  // Keep the client in sync with the active key without restarting loops.
-  useEffect(() => {
-    clientRef.current = new NebiusClient(nebiusApiKey)
-  }, [nebiusApiKey])
+  const clientRef = useRef<GatewayClient>(new GatewayClient())
 
   const start = useCallback(() => {
     if (engineRef.current) return

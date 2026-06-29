@@ -1,71 +1,31 @@
-import OpenAI from 'openai'
+import { GatewayClient } from './aiGateway'
 
 /**
- * Nebius configuration.
+ * Back-compat shim.
  *
- * The OpenAI-compatible inference API (Nebius AI Studio) authenticates with a
- * Bearer API key only — it does NOT take any of the console/Cloud identifiers
- * below in the request body. The project / tenant IDs are kept here purely for
- * reference and for any future Nebius AI Cloud (IAM) calls.
+ * The game used to call Nebius directly from the browser with a VITE_ key and
+ * `dangerouslyAllowBrowser` — i.e. it shipped a model-provider key to every
+ * visitor. All inference now flows through the InsForge `ai-chat` edge function
+ * (see aiGateway.ts), which holds the provider key server-side.
+ *
+ * `NebiusClient` is kept ONLY so existing call sites (agent.ts, crafting.ts,
+ * StoryFeed, CraftPanel, Game) keep compiling. It ignores the key argument and
+ * delegates to the gateway. New code should import `GatewayClient` directly.
  */
+
 export const NEBIUS_CONFIG = {
-  baseURL: 'https://api.studio.nebius.com/v1',
   /**
-   * Default chat model. Override with VITE_NEBIUS_MODEL.
-   * Qwen3-235B-Instruct = frontier-class quality + clean JSON mode at ~0.85s/call,
-   * the best fit for the per-agent game loop (verified live on this account).
-   * Max-capability alt: 'deepseek-ai/DeepSeek-V4-Pro' (~2.1s/call).
-   * Avoid: gpt-oss-120b / GLM-5.2 (return empty content under json_object here);
-   * reasoning/thinking models (their <think> output breaks json_object parsing).
+   * Vestigial. The gateway chooses the real model server-side (its allowlist +
+   * default, optionally hinted by VITE_AI_MODEL). Call sites that still pass
+   * `model: NEBIUS_CONFIG.model` are harmless — the gateway overrides it.
    */
-  model: import.meta.env.VITE_NEBIUS_MODEL || 'Qwen/Qwen3-235B-A22B-Instruct-2507',
-  /** Nebius AI Cloud console identifiers (reference only). */
-  projectId: import.meta.env.VITE_NEBIUS_PROJECT_ID || 'project-e00a898kpr00dr28vrewyf',
-  tenantUserAccountId:
-    import.meta.env.VITE_NEBIUS_TENANT_USER_ID || 'tenantuseraccount-e00cr4vga00dbmmszb',
-  aiTenantId: import.meta.env.VITE_NEBIUS_AI_TENANT_ID || 'aitenant-e00pjzpecsqg8m9mfb',
+  model: (import.meta.env.VITE_AI_MODEL as string) || 'gateway-default',
 } as const
 
-/**
- * NebiusClient - Wrapper for Nebius AI Cloud API
- * Provides LLM inference for agent reasoning and strategy
- */
-export class NebiusClient {
-  private client: OpenAI
-
-  constructor(apiKey: string) {
-    // Nebius uses OpenAI-compatible API.
-    // timeout + maxRetries give us the fallback/circuit-breaker the integration
-    // skill requires: a hung or 5xx call fails fast and retries with backoff
-    // instead of stalling the game loop.
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: NEBIUS_CONFIG.baseURL,
-      dangerouslyAllowBrowser: true,
-      timeout: 60_000,
-      maxRetries: 2,
-    })
-  }
-
-  getClient(): OpenAI {
-    return this.client
-  }
-
-  get model(): string {
-    return NEBIUS_CONFIG.model
-  }
-
-  async testConnection(): Promise<boolean> {
-    try {
-      const response = await this.client.chat.completions.create({
-        model: NEBIUS_CONFIG.model,
-        messages: [{ role: 'user', content: 'Hello' }],
-        max_tokens: 10,
-      })
-      return response.choices.length > 0
-    } catch (e) {
-      console.error('Nebius connection failed:', e)
-      return false
-    }
+export class NebiusClient extends GatewayClient {
+  // The key is intentionally ignored — it must never leave the server.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  constructor(_apiKey?: string) {
+    super()
   }
 }

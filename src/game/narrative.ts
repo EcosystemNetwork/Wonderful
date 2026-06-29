@@ -1,4 +1,4 @@
-import { NebiusClient, NEBIUS_CONFIG } from '../api/nebius'
+import { GatewayClient } from '../api/aiGateway'
 import { Agent } from './types'
 
 /**
@@ -43,7 +43,7 @@ export function systemBeat(text: string, cast: string[] = []): StoryBeat {
 
 /** One ambient narrative beat capturing the colony's current mood. */
 export async function narrateMoment(
-  client: NebiusClient,
+  client: GatewayClient,
   agents: Agent[],
   recent: string[],
 ): Promise<StoryBeat> {
@@ -52,7 +52,6 @@ export async function narrateMoment(
     .join('; ')
 
   const res = await client.getClient().chat.completions.create({
-    model: NEBIUS_CONFIG.model,
     temperature: 0.9,
     max_tokens: 160,
     response_format: { type: 'json_object' },
@@ -87,12 +86,11 @@ export interface EncounterResult {
  * may ADAPT their strategy as a result. Returns a narrative beat + strategy diffs.
  */
 export async function stageEncounter(
-  client: NebiusClient,
+  client: GatewayClient,
   a: Agent,
   b: Agent,
 ): Promise<EncounterResult> {
   const res = await client.getClient().chat.completions.create({
-    model: NEBIUS_CONFIG.model,
     temperature: 0.95,
     max_tokens: 320,
     response_format: { type: 'json_object' },

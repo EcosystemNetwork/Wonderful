@@ -1,5 +1,6 @@
 import { useAgentStore } from '../game/store'
 import { useRealtimeSim } from '../game/realtime'
+import { isAiConfigured } from '../api/aiGateway'
 
 const ROLE_EMOJI: Record<string, string> = {
   warrior: '⚔️',
@@ -16,12 +17,12 @@ const ROLE_EMOJI: Record<string, string> = {
 export default function LiveControls() {
   const { live, start, stop } = useRealtimeSim()
   const agents = useAgentStore((s) => s.agents)
-  const nebiusApiKey = useAgentStore((s) => s.nebiusApiKey)
   const situation = useAgentStore((s) => s.situation)
   const events = useAgentStore((s) => s.events)
   const thoughts = useAgentStore((s) => s.thoughts)
 
-  const ready = agents.length > 0 && Boolean(nebiusApiKey)
+  // AI runs server-side through the gateway — no key needed, just a backend.
+  const ready = agents.length > 0 && isAiConfigured
   const thinkingCount = agents.filter((a) => thoughts[a.id] === 'thinking').length
   const recent = [...events].slice(-8).reverse()
 
@@ -51,7 +52,9 @@ export default function LiveControls() {
 
       {!ready && !live && (
         <p className="mt-1 text-[10px] text-amber-400">
-          Connect Nebius and summon at least one agent first.
+          {isAiConfigured
+            ? 'Summon at least one agent first.'
+            : 'Backend offline — set VITE_INSFORGE_URL / _ANON_KEY to enable the AI.'}
         </p>
       )}
 

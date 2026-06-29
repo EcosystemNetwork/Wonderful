@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { Agent, GameState, Memory, WorldEvent } from './types'
 import { ChatMessage } from '../api/claude'
+import { MAX_CLEARANCE } from './progression'
 
 /** Top-level UI flow: character select (the gate) → create → enter arena. */
 export type Screen = 'landing' | 'select' | 'summon' | 'game'
@@ -57,6 +58,8 @@ interface AgentStore {
   addAgent: (agent: Agent) => void
   updateAgent: (id: string, updates: Partial<Agent>) => void
   removeAgent: (id: string) => void
+  /** Player-controlled clearance change (promote/demote). Clamped 0..MAX. */
+  setClearance: (id: string, clearance: number) => void
   addMemory: (memory: Memory) => void
   setGameState: (state: Partial<GameState>) => void
 }
@@ -110,6 +113,12 @@ export const useAgentStore = create<AgentStore>((set) => ({
   updateAgent: (id, updates) =>
     set((state) => ({
       agents: state.agents.map((a) => (a.id === id ? { ...a, ...updates } : a)),
+    })),
+  setClearance: (id, clearance) =>
+    set((state) => ({
+      agents: state.agents.map((a) =>
+        a.id === id ? { ...a, clearance: Math.max(0, Math.min(MAX_CLEARANCE, clearance)) } : a,
+      ),
     })),
   removeAgent: (id) =>
     set((state) => ({

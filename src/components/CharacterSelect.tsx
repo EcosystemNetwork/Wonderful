@@ -1,6 +1,6 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useGLTF } from '@react-three/drei'
+import { useGLTF, useAnimations, SpotLight, Sparkles } from '@react-three/drei'
 import * as THREE from 'three'
 import { useAgentStore } from '../game/store'
 import { Agent } from '../game/types'
@@ -14,31 +14,53 @@ const ROLE: Record<Agent['role'], { emoji: string; color: string; blurb: string 
   healer: { emoji: '✨', color: '#f59e0b', blurb: 'High wisdom. Keeps the party alive.' },
 }
 
-/** Rotating Meshy model on the pedestal. Suspends while loading. */
-function PreviewModel({ url }: { url: string }) {
-  const { scene } = useGLTF(url)
-  const model = useMemo(() => scene.clone(), [scene])
-  const ref = useRef<THREE.Group>(null)
-  useFrame((_, d) => {
-    if (ref.current) ref.current.rotation.y += d * 0.6
+/**
+ * Procedural idle applied to whatever character body it wraps: a slow turntable,
+ * gentle breathing sway, and a periodic "emote" hop every few seconds — so even a
+ * static Meshy model feels alive on the character-select stage.
+ */
+function IdleRig({ children }: { children: ReactNode }) {
+  const group = useRef<THREE.Group>(null)
+  useFrame((state, delta) => {
+    const g = group.current
+    if (!g) return
+    const t = state.clock.elapsedTime
+    g.rotation.y += delta * 0.35 // slow turntable
+    g.rotation.z = Math.sin(t * 0.7) * 0.025 // subtle weight shift
+    const breathe = Math.sin(t * 1.6) * 0.05
+    // emote: a quick hop in the first ~0.45s of every 6s cycle
+    const phase = t % 6
+    const hop = phase < 0.45 ? Math.sin((phase / 0.45) * Math.PI) * 0.22 : 0
+    g.position.y = -1 + breathe + hop
   })
   return (
-    <group ref={ref} position={[0, -1, 0]}>
+    <group ref={group} position={[0, -1, 0]}>
+      {children}
+    </group>
+  )
+}
+
+/** Meshy model body — plays its embedded idle clip if it has one. */
+function ModelBody({ url }: { url: string }) {
+  const ref = useRef<THREE.Group>(null)
+  const { scene, animations } = useGLTF(url)
+  const model = useMemo(() => scene.clone(), [scene])
+  const { actions, names } = useAnimations(animations, ref)
+  useEffect(() => {
+    const clip = names[0]
+    if (clip && actions[clip]) actions[clip].reset().fadeIn(0.4).play()
+  }, [actions, names])
+  return (
+    <group ref={ref}>
       <primitive object={model} scale={1.4} />
     </group>
   )
 }
 
 /** Fallback body when a character has no model yet (or it fails to load). */
-function PreviewOrb({ color }: { color: string }) {
-  const ref = useRef<THREE.Mesh>(null)
-  useFrame((s, d) => {
-    if (!ref.current) return
-    ref.current.rotation.y += d * 0.6
-    ref.current.position.y = Math.sin(s.clock.elapsedTime * 1.5) * 0.1
-  })
+function OrbBody({ color }: { color: string }) {
   return (
-    <mesh ref={ref}>
+    <mesh>
       <sphereGeometry args={[0.9, 48, 48]} />
       <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.45} roughness={0.3} />
     </mesh>
@@ -46,13 +68,18 @@ function PreviewOrb({ color }: { color: string }) {
 }
 
 function Pedestal({ color }: { color: string }) {
+  const ring = useRef<THREE.Mesh>(null)
+  useFrame((s) => {
+    const m = ring.current?.material as THREE.MeshStandardMaterial | undefined
+    if (m) m.emissiveIntensity = 0.8 + Math.sin(s.clock.elapsedTime * 1.5) * 0.4 // slow glow pulse
+  })
   return (
     <>
       <mesh position={[0, -1.2, 0]}>
         <cylinderGeometry args={[1.1, 1.35, 0.3, 48]} />
         <meshStandardMaterial color="#15131f" metalness={0.4} roughness={0.6} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.03, 0]}>
+      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.03, 0]}>
         <ringGeometry args={[1.15, 1.38, 48]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1} side={THREE.DoubleSide} />
       </mesh>
@@ -60,18 +87,45 @@ function Pedestal({ color }: { color: string }) {
   )
 }
 
+/** Slow cinematic camera drift — a lazy arc + vertical sway, always framing the hero. */
+function CameraRig() {
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    state.camera.position.x = Math.sin(t * 0.15) * 0.9
+    state.camera.position.z = 4.7 + Math.cos(t * 0.12) * 0.4
+    state.camera.position.y = 1 + Math.sin(t * 0.2) * 0.25
+    state.camera.lookAt(0, 0.05, 0)
+  })
+  return null
+}
+
 function CharacterPreview({ agent }: { agent: Agent }) {
   const color = ROLE[agent.role].color
   return (
-    <Canvas camera={{ position: [0, 1, 4.6], fov: 50 }}>
-      <ambientLight intensity={0.6} />
-      <spotLight position={[3, 6, 4]} intensity={1.4} angle={0.6} penumbra={0.5} />
-      <pointLight position={[-4, 2, -2]} intensity={0.6} color={color} />
-      <ErrorBoundary fallback={<PreviewOrb color={color} />}>
-        <Suspense fallback={<PreviewOrb color={color} />}>
-          {agent.modelUrl ? <PreviewModel url={agent.modelUrl} /> : <PreviewOrb color={color} />}
+    <Canvas camera={{ position: [0, 1, 4.7], fov: 50 }}>
+      <CameraRig />
+      <ambientLight intensity={0.35} />
+      <pointLight position={[-4, 2, -2]} intensity={0.5} color={color} />
+      {/* volumetric key light raking down onto the pedestal */}
+      <SpotLight
+        position={[2.6, 6, 3]}
+        angle={0.5}
+        penumbra={0.7}
+        intensity={2.2}
+        distance={14}
+        attenuation={6}
+        anglePower={4}
+        color="#fef3ff"
+      />
+      <ErrorBoundary fallback={<IdleRig><OrbBody color={color} /></IdleRig>}>
+        <Suspense fallback={<IdleRig><OrbBody color={color} /></IdleRig>}>
+          <IdleRig>
+            {agent.modelUrl ? <ModelBody url={agent.modelUrl} /> : <OrbBody color={color} />}
+          </IdleRig>
         </Suspense>
       </ErrorBoundary>
+      {/* drifting motes of light for atmosphere */}
+      <Sparkles count={40} scale={[5, 4, 5]} size={2} speed={0.3} color={color} opacity={0.5} />
       <Pedestal color={color} />
     </Canvas>
   )

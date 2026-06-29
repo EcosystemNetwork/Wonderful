@@ -3,7 +3,6 @@ import { useAgentStore } from '../game/store'
 import {
   testClaudeConnection,
   chatWithClaude,
-  CLAUDE_PROXY_CONFIG,
   ChatMessage,
 } from '../api/claude'
 import { saveChatMessage, listChat } from '../api/insforge'
@@ -19,9 +18,9 @@ function buildSystemPrompt(): string {
 
   return [
     'You are Claude, embedded INSIDE a browser game called "Wonderful" — a self-improving',
-    'AI agent arena (React + Three.js, backed by Nebius for agent reasoning and InsForge',
-    'for memory). You are reached through the Claude Code Proxy, so you are running on a',
-    'Nebius model right now. The player is talking to you live from within the game.',
+    'AI agent arena (React + Three.js, with agent reasoning and your own chat served',
+    'through the InsForge AI gateway, and InsForge for memory/storage). The player is',
+    'talking to you live from within the game.',
     '',
     'Your job: be a sharp, concrete collaborator. Help them understand and IMPROVE the game',
     'from the inside out — mechanics, balance, new features, what would make it more fun or',
@@ -155,8 +154,8 @@ export default function ClaudeChat() {
             {connecting ? 'Connecting…' : 'Try again'}
           </button>
           <p className="mt-1 text-[10px] text-gray-500">
-            Developer note: start the proxy with{' '}
-            <code className="text-gray-400">start_proxy.py</code> on :8083 ({CLAUDE_PROXY_CONFIG.baseUrl}).
+            Chat runs through the InsForge AI gateway — if it's offline, the
+            backend may still be waking up or the model gateway key isn't set.
           </p>
         </>
       ) : (

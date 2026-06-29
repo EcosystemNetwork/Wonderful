@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useAgentStore } from '../game/store'
-import { NebiusClient } from '../api/nebius'
+import { GatewayClient, isAiConfigured } from '../api/aiGateway'
 import {
   StoryBeat,
   systemBeat,
@@ -20,7 +20,7 @@ const KIND_STYLE: Record<StoryBeat['kind'], string> = {
  * keeps weaving the story on a heartbeat so the world feels alive on its own.
  */
 export default function StoryFeed() {
-  const { agents, nebiusApiKey, updateAgent } = useAgentStore()
+  const { agents, updateAgent } = useAgentStore()
   const [beats, setBeats] = useState<StoryBeat[]>([])
   const [busy, setBusy] = useState(false)
   const [live, setLive] = useState(false)
@@ -29,8 +29,8 @@ export default function StoryFeed() {
   const liveRef = useRef(false)
 
   const client = useMemo(
-    () => (nebiusApiKey ? new NebiusClient(nebiusApiKey) : null),
-    [nebiusApiKey],
+    () => (isAiConfigured ? new GatewayClient() : null),
+    [],
   )
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export default function StoryFeed() {
 
   const weaveOnce = async () => {
     if (!client) {
-      setError('Connect Nebius first to generate story.')
+      setError('AI backend offline — story generation needs the InsForge gateway.')
       return
     }
     setError(null)
@@ -152,7 +152,7 @@ export default function StoryFeed() {
           Stage encounter
         </button>
       </div>
-      {!client && <p className="mt-1 text-[10px] text-gray-500">Connect Nebius to generate story.</p>}
+      {!client && <p className="mt-1 text-[10px] text-gray-500">AI backend offline — story needs the InsForge gateway.</p>}
       {error && <p className="mt-1 text-[11px] text-red-400">{error}</p>}
     </div>
   )

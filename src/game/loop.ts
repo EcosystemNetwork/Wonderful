@@ -1,24 +1,24 @@
 import { useMemo, useState } from 'react'
 import { useAgentStore, THINKING } from '../game/store'
 import { SelfImprovingAgent } from '../game/agent'
-import { NebiusClient } from '../api/nebius'
+import { GatewayClient } from '../api/aiGateway'
 import { saveMemory, saveRun } from '../api/insforge'
 import { Challenge } from '../game/types'
-import { knowledgeGain, applyLearning, clearanceLabel } from '../game/progression'
+import { knowledgeGain, applyLearning, clearanceForKnowledge, clearanceLabel } from '../game/progression'
 
 /**
  * GameLoop - Core game orchestration
  * Manages turns, challenges, agent decisions, and self-improvement
  */
 export function useGameLoop() {
-  const { setGameState, updateAgent, addMemory, nebiusApiKey, setThought } =
+  const { setGameState, updateAgent, addMemory, setThought } =
     useAgentStore()
   const [isRunning, setIsRunning] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
 
-  // Rebuild the client only when the active key changes (set by Connect in Game.tsx,
-  // defaulting to VITE_NEBIUS_API_KEY). Avoids a fresh client on every render.
-  const nebius = useMemo(() => new NebiusClient(nebiusApiKey), [nebiusApiKey])
+  // All inference goes through the InsForge `ai-chat` gateway — no provider key
+  // in the browser. The client is stateless, so one instance is enough.
+  const nebius = useMemo(() => new GatewayClient(), [])
 
   const addLog = (msg: string) => {
     const t = useAgentStore.getState().gameState.turn
@@ -113,17 +113,20 @@ export function useGameLoop() {
           addLog(`  ↳ memory saved to InsForge (${result.key.slice(0, 8)})`)
         }
 
-        // Learn from the attempt: earn Knowledge, which can grant a clearance tier.
+        // Learn from the attempt: earn Knowledge. Clearance is NOT granted here —
+        // the player decides who gets promoted and when. Learning just makes a
+        // character *eligible*; we flag that the first time they cross a tier.
         const gained = knowledgeGain(action.confidence, challenge.difficulty)
         const learned = applyLearning(agent, gained)
         updateAgent(agent.id, {
           knowledge: learned.knowledge,
-          clearance: learned.clearance,
           xp: agent.xp + gained,
         })
         addLog(`  ↳ ${agent.name} learned +${gained} knowledge (${learned.knowledge} total)`)
-        if (learned.promoted) {
-          addLog(`🔓 ${agent.name} earned ${clearanceLabel(learned.clearance)} clearance — a gate opens!`)
+        const eligibleBefore = clearanceForKnowledge(agent.knowledge)
+        const eligibleNow = clearanceForKnowledge(learned.knowledge)
+        if (eligibleNow > eligibleBefore && eligibleNow > agent.clearance) {
+          addLog(`✅ ${agent.name} is ready for ${clearanceLabel(eligibleNow)} — promote when you want.`)
         }
 
         // Check for level up

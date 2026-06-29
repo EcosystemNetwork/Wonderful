@@ -1,11 +1,26 @@
 import { useState, useRef, useMemo, useEffect, Suspense } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, Text, Box, Sphere, useGLTF, Html } from '@react-three/drei'
+import {
+  OrbitControls,
+  Text,
+  Box,
+  Sphere,
+  useGLTF,
+  Html,
+  Environment,
+  ContactShadows,
+  Grid,
+  Stars,
+  Sparkles,
+  Float,
+  SoftShadows,
+  useAnimations,
+} from '@react-three/drei'
 import { useAgentStore, THINKING } from '../game/store'
 import { Agent } from '../game/types'
 import { NebiusClient } from '../api/nebius'
 import { useGameLoop } from '../game/loop'
-import { SECTOR_COUNT, SECTOR_SPAN, gateZ, sectorCenterZ, sectorBounds, clearanceLabel, clearanceProgress } from '../game/progression'
+import { SECTOR_COUNT, SECTOR_SPAN, MAX_CLEARANCE, gateZ, sectorCenterZ, sectorBounds, clearanceLabel, clearanceProgress, clearanceForKnowledge } from '../game/progression'
 import { isInsforgeConfigured } from '../api/insforge'
 import MeshyPanel from './MeshyPanel'
 import LiveControls from './LiveControls'
@@ -15,6 +30,7 @@ import ClaudeChat from './ClaudeChat'
 import StoryFeed from './StoryFeed'
 import CraftPanel from './CraftPanel'
 import * as THREE from 'three'
+import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js'
 
 const ROLE_COLOR: Record<Agent['role'], string> = {
   warrior: '#ef4444',
@@ -25,9 +41,34 @@ const ROLE_COLOR: Record<Agent['role'], string> = {
 
 /** Loads and renders a Meshy-generated .glb model. Suspends while fetching. */
 function CharacterModel({ url }: { url: string }) {
-  const { scene } = useGLTF(url)
-  const model = useMemo(() => scene.clone(), [scene])
-  return <primitive object={model} scale={0.8} />
+  const group = useRef<THREE.Group>(null)
+  const { scene, animations } = useGLTF(url)
+  // SkeletonUtils.clone preserves skinned-mesh bindings; a plain scene.clone()
+  // would detach the skeleton and the model would render in its bind pose.
+  const model = useMemo(() => {
+    const c = cloneSkeleton(scene)
+    c.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) {
+        o.castShadow = true
+        o.receiveShadow = true
+      }
+    })
+    return c
+  }, [scene])
+  // Auto-play the first clip (Meshy rigs ship an idle/walk) so characters breathe.
+  const { actions, names } = useAnimations(animations, group)
+  useEffect(() => {
+    const first = names[0]
+    if (first && actions[first]) {
+      actions[first].reset().fadeIn(0.3).play()
+      return () => void actions[first]?.fadeOut(0.3)
+    }
+  }, [actions, names])
+  return (
+    <group ref={group}>
+      <primitive object={model} scale={0.8} />
+    </group>
+  )
 }
 
 /** The visible body of an agent (model or glowing orb). */
@@ -47,11 +88,13 @@ function AgentBody({ agent }: { agent: Agent }) {
     )
   }
   return (
-    <Sphere args={[0.5, 32, 32]}>
+    <Sphere args={[0.5, 32, 32]} castShadow receiveShadow>
       <meshStandardMaterial
         color={color}
         emissive={color}
-        emissiveIntensity={0.2 + (agent.level - 1) * 0.1}
+        emissiveIntensity={0.35 + (agent.level - 1) * 0.15}
+        roughness={0.25}
+        metalness={0.4}
       />
     </Sphere>
   )
@@ -313,37 +356,69 @@ function GameArena() {
 
   return (
     <>
+      {/* Soft, contact-hardening shadows for the whole scene. */}
+      <SoftShadows size={28} samples={10} focus={0.8} />
+
       <ClearanceField maxClearance={maxClearance} />
-      <ambientLight intensity={0.5} />
-      <pointLight position={[10, 10, 10]} intensity={1} />
-      <pointLight position={[-10, 5, -10]} intensity={0.5} color="#3b82f6" />
-      <Box args={[20, 0.5, 20]} position={[0, -2, 0]}>
-        <meshStandardMaterial color="#1a1a2e" />
-      </Box>
-      {Array.from({ length: 10 }).map((_, i) => (
-        <Box key={`grid-x-${i}`} args={[20, 0.02, 0.02]} position={[0, -1.7, (i - 5) * 2]}>
-          <meshStandardMaterial color="#333" transparent opacity={0.3} />
-        </Box>
-      ))}
-      {Array.from({ length: 10 }).map((_, i) => (
-        <Box key={`grid-z-${i}`} args={[0.02, 0.02, 20]} position={[(i - 5) * 2, -1.7, 0]}>
-          <meshStandardMaterial color="#333" transparent opacity={0.3} />
-        </Box>
-      ))}
-      {Array.from({ length: 20 }).map((_, i) => (
-        <Sphere key={`particle-${i}`} args={[0.05, 8, 8]} position={[
-          Math.sin(i * 1.5) * 8,
-          Math.cos(i * 0.5) * 3,
-          Math.cos(i * 1.5) * 8,
-        ]}>
-          <meshStandardMaterial color="#60a5fa" emissive="#60a5fa" emissiveIntensity={0.8} />
-        </Sphere>
-      ))}
+
+      {/* Lighting rig: a key directional light casts shadows; cool/warm rim
+          lights give the arena depth, and image-based lighting fills the rest. */}
+      <hemisphereLight args={['#8ab4ff', '#0a0a18', 0.6]} />
+      <directionalLight
+        position={[8, 14, 6]}
+        intensity={1.6}
+        castShadow
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0004}
+      >
+        <orthographicCamera attach="shadow-camera" args={[-14, 14, 14, -14, 0.1, 40]} />
+      </directionalLight>
+      <pointLight position={[-12, 6, -12]} intensity={40} color="#3b82f6" distance={45} decay={2} />
+      <pointLight position={[12, 4, 12]} intensity={28} color="#e879f9" distance={45} decay={2} />
+      <Environment preset="city" />
+
+      {/* Ground + a glowing reference grid that reads better than hand-built bars. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.74, 0]} receiveShadow>
+        <planeGeometry args={[60, 60]} />
+        <meshStandardMaterial color="#0c0c1a" roughness={0.7} metalness={0.2} />
+      </mesh>
+      <Grid
+        position={[0, -1.72, 0]}
+        args={[60, 60]}
+        cellSize={1}
+        cellThickness={0.6}
+        cellColor="#1e293b"
+        sectionSize={5}
+        sectionThickness={1.1}
+        sectionColor="#3b82f6"
+        fadeDistance={45}
+        fadeStrength={1.5}
+        infiniteGrid
+        followCamera={false}
+      />
+      {/* Soft blob shadows directly under characters, layered on the grid. */}
+      <ContactShadows position={[0, -1.7, 0]} scale={42} blur={2.4} opacity={0.5} far={6} resolution={1024} />
+
+      {/* Ambiance: a starfield backdrop + drifting energy motes. */}
+      <Stars radius={80} depth={40} count={1500} factor={3} saturation={0} fade speed={0.6} />
+      <Sparkles count={60} scale={[24, 10, 24]} size={3} speed={0.4} color="#60a5fa" opacity={0.6} />
+      <Float speed={1.5} rotationIntensity={0} floatIntensity={1.5}>
+        <Sparkles count={24} scale={[16, 6, 16]} size={5} speed={0.3} color="#e879f9" opacity={0.5} />
+      </Float>
+
       {idle.map((agent) => (
         <WanderingAgent key={agent.id} agent={agent} />
       ))}
       {player && <PlayerAgent key={player.id} agent={player} />}
-      <OrbitControls makeDefault />
+      <OrbitControls
+        makeDefault
+        enableDamping
+        dampingFactor={0.08}
+        minDistance={4}
+        maxDistance={28}
+        maxPolarAngle={Math.PI / 2.05}
+        target={[0, 0, 0]}
+      />
     </>
   )
 }
@@ -358,6 +433,7 @@ export default function Game() {
     setNebiusApiKey,
     controlledAgentId,
     setControlledAgentId,
+    setClearance,
   } = useAgentStore()
   const [apiKey, setApiKey] = useState(nebiusApiKey)
   const [isConnected, setIsConnected] = useState(false)
@@ -393,9 +469,34 @@ export default function Game() {
     }
   }
 
-  // Auto-connect from the env-provided key so players never see a setup wall.
+  // Keyless connect: the AI runs server-side through the InsForge gateway, so we
+  // just probe it — no key to paste. This is the production path.
+  const connectGateway = async () => {
+    setIsConnecting(true)
+    setConnectError(null)
+    try {
+      const client = new NebiusClient() // shim → gateway; key ignored
+      const ok = await client.testConnection()
+      if (ok) {
+        nebiusRef.current = client
+        setIsConnected(true)
+      } else {
+        setConnectError("The AI brain didn't respond — the backend may still be waking up.")
+      }
+    } catch (e) {
+      setConnectError(e instanceof Error ? e.message : 'Could not reach the AI.')
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
+  // Auto-connect on mount so players never see a setup wall. Prefer the gateway
+  // (no key); fall back to a pasted/env key only when there's no backend.
   useEffect(() => {
-    if (nebiusApiKey && !isConnected && !isConnecting) {
+    if (isConnected || isConnecting) return
+    if (isInsforgeConfigured) {
+      void connectGateway()
+    } else if (nebiusApiKey) {
       connect(nebiusApiKey)
     }
     // run once on mount
@@ -420,7 +521,14 @@ export default function Game() {
             </div>
           }
         >
-          <Canvas camera={{ position: [0, 5, 10], fov: 60 }}>
+          <Canvas
+            shadows
+            dpr={[1, 2]}
+            camera={{ position: [0, 6, 12], fov: 55 }}
+            gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1 }}
+          >
+            <color attach="background" args={['#05050c']} />
+            <fog attach="fog" args={['#05050c', 22, 55]} />
             <Suspense fallback={null}>
               <GameArena />
             </Suspense>
@@ -470,41 +578,73 @@ export default function Game() {
         )}
 
         <div className="absolute top-4 right-4 bg-black/70 p-4 rounded-lg backdrop-blur max-w-xs">
-          <h3 className="font-bold mb-2">Party — click to drive</h3>
+          <h3 className="font-bold mb-2">Party — click to drive · you grant clearance</h3>
           {agents.map((agent) => {
             const prog = clearanceProgress(agent.knowledge)
             const cleared = agent.clearance > 0
+            // Learning earns *eligibility*; the player decides when to promote.
+            const ready = clearanceForKnowledge(agent.knowledge) > agent.clearance
+            const atTop = agent.clearance >= MAX_CLEARANCE
             return (
-              <button
+              <div
                 key={agent.id}
-                onClick={() => setControlledAgentId(agent.id)}
-                className={`w-full text-left text-xs mb-2 p-1.5 rounded transition ${
+                className={`text-xs mb-2 p-1.5 rounded ${
                   agent.id === controlledAgentId ? 'bg-fuchsia-600/30 ring-1 ring-fuchsia-400/50' : 'hover:bg-white/5'
                 }`}
               >
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold">
-                    {agent.id === controlledAgentId && '🎮 '}
-                    {agent.name}
-                  </span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.5 rounded ${
-                      cleared ? 'bg-emerald-600/30 text-emerald-300' : 'bg-gray-600/40 text-gray-400'
+                <div
+                  role="button"
+                  onClick={() => setControlledAgentId(agent.id)}
+                  className="cursor-pointer"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold">
+                      {agent.id === controlledAgentId && '🎮 '}
+                      {agent.name}
+                    </span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded ${
+                        cleared ? 'bg-emerald-600/30 text-emerald-300' : 'bg-gray-600/40 text-gray-400'
+                      }`}
+                    >
+                      {cleared ? `🔑 ${clearanceLabel(agent.clearance)}` : 'UNCLEARED'}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1 bg-gray-600 rounded overflow-hidden">
+                    <div className="h-full bg-cyan-400" style={{ width: `${prog.ratio * 100}%` }} />
+                  </div>
+                  <div className="text-[10px] text-gray-500 mt-0.5">
+                    {prog.next === null
+                      ? `${agent.knowledge} knowledge · fully studied`
+                      : `${agent.knowledge} knowledge · ${prog.toNext} to be ready for ${clearanceLabel(prog.next)}`}
+                  </div>
+                </div>
+
+                {/* You decide who gets clearance, and when. */}
+                <div className="mt-1.5 flex items-center gap-1">
+                  <button
+                    onClick={() => setClearance(agent.id, agent.clearance - 1)}
+                    disabled={agent.clearance <= 0}
+                    title="Revoke a clearance level"
+                    className="px-2 py-0.5 rounded bg-gray-600 hover:bg-gray-500 disabled:opacity-30"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    onClick={() => setClearance(agent.id, agent.clearance + 1)}
+                    disabled={atTop}
+                    className={`flex-1 px-2 py-0.5 rounded font-semibold disabled:opacity-40 ${
+                      ready ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-emerald-700/50 hover:bg-emerald-600/60'
                     }`}
                   >
-                    {cleared ? `🔑 ${clearanceLabel(agent.clearance)}` : 'UNCLEARED'}
-                  </span>
+                    {atTop
+                      ? 'Max clearance'
+                      : ready
+                        ? `✅ Promote to ${clearanceLabel(agent.clearance + 1)}`
+                        : `Promote to ${clearanceLabel(agent.clearance + 1)}`}
+                  </button>
                 </div>
-                {/* knowledge → next clearance */}
-                <div className="mt-1 h-1 bg-gray-600 rounded overflow-hidden">
-                  <div className="h-full bg-cyan-400" style={{ width: `${prog.ratio * 100}%` }} />
-                </div>
-                <div className="text-[10px] text-gray-500 mt-0.5">
-                  {prog.next === null
-                    ? 'Top clearance reached'
-                    : `${agent.knowledge} knowledge · ${prog.toNext} to ${clearanceLabel(prog.next)}`}
-                </div>
-              </button>
+              </div>
             )
           })}
         </div>
